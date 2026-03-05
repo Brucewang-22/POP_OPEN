@@ -163,11 +163,11 @@ static OPERATE_RET __ai_mcp_tools_register(void)
     // device camera take photo tool
     TUYA_CALL_ERR_GOTO(AI_MCP_TOOL_ADD(
         "device_camera_take_photo",
-        "Activates the device's camera to capture one or more photos.\n"
+        "Captures one or more photos using the device camera. Use when picture or scene "
+        "change is detected, for visitor detection, or when the user asks for a photo.\n"
         "Parameters:\n"
         "- count (int): Number of photos to capture (1-10).\n"
-        "Response:\n"
-        "- Returns the captured photos encoded in Base64 format.",
+        "Returns: Captured image(s) in Base64 format.",
         __take_photo,
         NULL,
         MCP_PROP_STR("question", "The question prompting the photo capture."),
