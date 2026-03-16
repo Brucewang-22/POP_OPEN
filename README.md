@@ -1,3 +1,5 @@
+# 架构已经搭好，开发说明正在持续完善
+
 <p align="center">
 <img src="https://images.tuyacn.com/fe-static/docs/img/c128362b-eb25-4512-b5f2-ad14aae2395c.jpg" width="100%" >
 </p>
