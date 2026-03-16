@@ -39,6 +39,10 @@
   <a href="./README_zh.md"><img alt="简体中文版自述文件" src="https://img.shields.io/badge/简体中文-d9d9d9"></a>
 </p>
 
+## Notice
+
+The framework setup has been completed. Detailed documentation is being finalized and will be updated as soon as possible.
+
 
 ## Overview
 

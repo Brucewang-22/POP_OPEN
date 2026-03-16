@@ -1,0 +1,33 @@
+menu "configure app (your_pop_robot) "
+
+config TUYA_PRODUCT_ID
+    string "product ID of project"
+    default "aub53kai42j8fdlf"
+
+menu "hardware module switch"
+
+config ENABLE_HARDWARE_IMU
+    bool "enable IMU (mpu6050 + ahrs)"
+    default y
+
+config ENABLE_HARDWARE_LCD
+    bool "enable LCD (gc9d01)"
+    default y
+
+config ENABLE_HARDWARE_MOTO
+    bool "enable moto (servo bringup)"
+    default y
+
+config ENABLE_HARDWARE_MICROPHONE
+    bool "enable microphone bringup monitor"
+    default y
+
+config ENABLE_HARDWARE_TOUCH
+    bool "enable external touch bringup monitor"
+    default y
+
+endmenu
+
+rsource "../ai_components/Kconfig"
+
+endmenu

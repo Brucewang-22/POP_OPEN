@@ -106,6 +106,12 @@ choice
             rsource "./TUYA_T5AI_EINK_NFC/Kconfig"
         endif
 
+    config BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD
+        bool "LIBTECH_POP_T5AI_BOARD"
+        if (BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD)
+            rsource "./LIBTECH_POP_T5AI_BOARD/Kconfig"
+        endif
+
 # <new-board-add: This line cannot be deleted or modified>
 
 endchoice
