@@ -1,5 +1,9 @@
 # 架构已经搭好，开发说明正在持续完善
 
+- 应用层：`apps/tuya.ai/your_pop_robot`
+- 板层：`boards/T5AI/LIBTECH_POP_T5AI_BOARD`
+- Agent层：`agentme`
+
 <p align="center">
 <img src="https://images.tuyacn.com/fe-static/docs/img/c128362b-eb25-4512-b5f2-ad14aae2395c.jpg" width="100%" >
 </p>
