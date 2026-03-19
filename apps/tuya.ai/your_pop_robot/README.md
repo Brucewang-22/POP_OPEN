@@ -40,31 +40,22 @@ your_pop_robot/
 └── README.md                                
 ```
 
-## 2. 关键文件说明 
+## 2. 关键文件说明
 
-| `config/LIBTECH_POP_T5AI_DECONFIG.config` | 板级配置文件，硬件开关与板级选型 
-| `src/tuya_main.c` | 代码入口，包含硬件初始化流程
-|
-| `src/hardware/gen_audio_arrays.py` | 音频转换为数组脚本，执行后会在子文件夹生成数组代码文件，xxx.h xxx.c 用以发音逻辑调用
-|
-| `src/hardware/lcd/display_lib/gen_lcd_arrays.py` | LCD 素材构建期打包脚本
-|
-| `tools/imu_attitude_ui.py` | IMU 数据可视化 UI，执行后会跳转至浏览器显示 IMU 可视化 UI 界面
-|
-| `tools/mic_waveform_ui.py` | 麦克风 数据可视化 UI，执行后会跳转至浏览器显示 麦克风 可视化 UI 界面
-|
-| `tools/requirements.txt` | 使用上述 UI 界面前需先配制环境 pip install -r requirements.txt
-|
-| `app_default.config` | 构建时读取的工程配置副本，由build_flash.sh copy config下的板级配置
-|                        文件生成，方便对不同板级config做兼容
-|
-| `build_flash.sh` | 构建烧录脚本 
-|
-| `CMakeLists.txt` | Cmake 文件
-|
+| 文件 | 作用 |
+| --- | --- |
+| `config/LIBTECH_POP_T5AI_DECONFIG.config` | 板级配置文件，硬件开关与板级选型 |
+| `src/tuya_main.c` | 代码入口，包含硬件初始化流程 |
+| `src/hardware/audio/sound_lib/gen_audio_arrays.py` | 音频转数组脚本。执行后会在子文件夹生成 `xxx.h`、`xxx.c`，供发音逻辑调用 |
+| `src/hardware/lcd/display_lib/gen_lcd_arrays.py` | LCD 素材构建期打包脚本 |
+| `tools/imu_attitude_ui.py` | IMU 数据可视化 UI，运行后可在浏览器查看 |
+| `tools/mic_waveform_ui.py` | 麦克风数据可视化 UI，运行后可在浏览器查看 |
+| `tools/requirements.txt` | 可视化脚本依赖清单，先执行 `pip install -r tools/requirements.txt` |
+| `app_default.config` | 构建读取的工程配置副本，由 `build_flash.sh` 从 `config/` 下板级配置同步生成 |
+| `build_flash.sh` | 构建烧录脚本 |
+| `CMakeLists.txt` | CMake 构建入口文件 |
 | `CONNECTION.md` | 硬件接线与引脚说明 |
-|
-| `Kconfig` | 配置项定义文件 
+| `Kconfig` | 配置项定义文件 |
 
 
 ## 3. 新增硬件标准流程
