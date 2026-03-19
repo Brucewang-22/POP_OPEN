@@ -45,6 +45,12 @@ if (CONFIG_ENABLE_HARDWARE_TOUCH STREQUAL "y")
     list(APPEND APP_SRCS ${TOUCH_SRCS})
 endif()
 
+# hardware/audio (local speaker playback bring-up)
+if (CONFIG_ENABLE_COMP_AI_AUDIO STREQUAL "y")
+    aux_source_directory(${APP_PATH}/src/hardware/audio AUDIO_SRCS)
+    list(APPEND APP_SRCS ${AUDIO_SRCS})
+endif()
+
 # local assets: lcd jpg frames and audio mp3 clips (embedded into firmware)
 file(GLOB_RECURSE LCD_TEST_FRAME_FILES ${APP_PATH}/src/hardware/lcd/display_lib/*/*/*.jpg)
 set(LCD_ASSET_GEN_PY ${APP_PATH}/src/hardware/lcd/display_lib/gen_lcd_arrays.py)
@@ -131,6 +137,10 @@ endif()
 
 if (CONFIG_ENABLE_HARDWARE_TOUCH STREQUAL "y")
     list(APPEND APP_INC ${APP_PATH}/src/hardware/touch)
+endif()
+
+if (CONFIG_ENABLE_COMP_AI_AUDIO STREQUAL "y")
+    list(APPEND APP_INC ${APP_PATH}/src/hardware/audio)
 endif()
 
 list(APPEND APP_INC ${APP_GEN_DIR})
