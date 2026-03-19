@@ -9,6 +9,9 @@ set(APP_PATH ${CMAKE_CURRENT_LIST_DIR})
 # APP_NAME
 get_filename_component(APP_NAME ${APP_PATH} NAME)
 
+set(APP_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+file(MAKE_DIRECTORY ${APP_GEN_DIR})
+
 # APP_SRCS
 aux_source_directory(${APP_PATH}/src APP_SRCS)
 
@@ -42,6 +45,64 @@ if (CONFIG_ENABLE_HARDWARE_TOUCH STREQUAL "y")
     list(APPEND APP_SRCS ${TOUCH_SRCS})
 endif()
 
+# local assets: lcd jpg frames and audio mp3 clips (embedded into firmware)
+file(GLOB_RECURSE LCD_TEST_FRAME_FILES ${APP_PATH}/src/hardware/lcd/display_lib/*/*/*.jpg)
+set(LCD_ASSET_GEN_PY ${APP_PATH}/src/hardware/lcd/display_lib/gen_lcd_arrays.py)
+set(LCD_ASSET_OUTPUTS)
+set(LCD_ASSET_INC_DIRS ${APP_PATH}/src/hardware/lcd/display_lib)
+foreach(LCD_FILE ${LCD_TEST_FRAME_FILES})
+    get_filename_component(LCD_DIR ${LCD_FILE} DIRECTORY)
+    get_filename_component(LCD_GROUP_DIR ${LCD_DIR} DIRECTORY)
+    get_filename_component(LCD_GROUP_NAME ${LCD_GROUP_DIR} NAME)
+    list(APPEND LCD_ASSET_OUTPUTS
+        ${LCD_DIR}/${LCD_GROUP_NAME}_lcd_assets.c
+        ${LCD_DIR}/${LCD_GROUP_NAME}_lcd_assets.h
+    )
+    list(APPEND LCD_ASSET_INC_DIRS ${LCD_DIR})
+endforeach()
+list(REMOVE_DUPLICATES LCD_ASSET_OUTPUTS)
+list(REMOVE_DUPLICATES LCD_ASSET_INC_DIRS)
+add_custom_command(
+    OUTPUT ${LCD_ASSET_OUTPUTS}
+    COMMAND python3 ${LCD_ASSET_GEN_PY} --root ${APP_PATH}/src/hardware/lcd/display_lib
+    DEPENDS ${LCD_ASSET_GEN_PY} ${LCD_TEST_FRAME_FILES}
+    COMMENT "Generating embedded LCD frame assets by eye group"
+    VERBATIM
+)
+foreach(LCD_OUTPUT ${LCD_ASSET_OUTPUTS})
+    if(LCD_OUTPUT MATCHES "\\.c$")
+        list(APPEND APP_SRCS ${LCD_OUTPUT})
+    endif()
+endforeach()
+
+file(GLOB_RECURSE AUDIO_TEST_CLIP_FILES ${APP_PATH}/src/hardware/audio/sound_lib/*/*.mp3)
+set(AUDIO_ASSET_GEN_PY ${APP_PATH}/src/hardware/audio/sound_lib/gen_audio_arrays.py)
+set(AUDIO_ASSET_OUTPUTS)
+set(AUDIO_ASSET_INC_DIRS)
+foreach(AUDIO_FILE ${AUDIO_TEST_CLIP_FILES})
+    get_filename_component(AUDIO_DIR ${AUDIO_FILE} DIRECTORY)
+    get_filename_component(AUDIO_DIR_NAME ${AUDIO_DIR} NAME)
+    list(APPEND AUDIO_ASSET_OUTPUTS
+        ${AUDIO_DIR}/${AUDIO_DIR_NAME}_audio_assets.c
+        ${AUDIO_DIR}/${AUDIO_DIR_NAME}_audio_assets.h
+    )
+    list(APPEND AUDIO_ASSET_INC_DIRS ${AUDIO_DIR})
+endforeach()
+list(REMOVE_DUPLICATES AUDIO_ASSET_OUTPUTS)
+list(REMOVE_DUPLICATES AUDIO_ASSET_INC_DIRS)
+add_custom_command(
+    OUTPUT ${AUDIO_ASSET_OUTPUTS}
+    COMMAND python3 ${AUDIO_ASSET_GEN_PY} --root ${APP_PATH}/src/hardware/audio/sound_lib
+    DEPENDS ${AUDIO_ASSET_GEN_PY} ${AUDIO_TEST_CLIP_FILES}
+    COMMENT "Generating embedded audio clip assets by sound_lib subdirectory"
+    VERBATIM
+)
+foreach(AUDIO_OUTPUT ${AUDIO_ASSET_OUTPUTS})
+    if(AUDIO_OUTPUT MATCHES "\\.c$")
+        list(APPEND APP_SRCS ${AUDIO_OUTPUT})
+    endif()
+endforeach()
+
 
 set(APP_INC
             ${APP_PATH}/include
@@ -71,6 +132,10 @@ endif()
 if (CONFIG_ENABLE_HARDWARE_TOUCH STREQUAL "y")
     list(APPEND APP_INC ${APP_PATH}/src/hardware/touch)
 endif()
+
+list(APPEND APP_INC ${APP_GEN_DIR})
+list(APPEND APP_INC ${LCD_ASSET_INC_DIRS})
+list(APPEND APP_INC ${AUDIO_ASSET_INC_DIRS})
 
 ########################################
 # Target Configure

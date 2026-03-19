@@ -15,30 +15,15 @@
  */
 
 #include "tuya_cloud_types.h"
+#include <string.h>
 
-#include <assert.h>
 #include "cJSON.h"
 #include "tal_api.h"
-#include "tuya_config.h"
-#include "tuya_iot.h"
-#include "tuya_iot_dp.h"
-#include "netmgr.h"
 #include "tkl_output.h"
+#include "tkl_gpio.h"
 #include "tal_cli.h"
-#include "tuya_authorize.h"
-
-#if defined(ENABLE_WIFI) && (ENABLE_WIFI == 1)
-#include "netconn_wifi.h"
-#else
-// Stub WiFi functions for non-WiFi platforms (e.g., Ubuntu with wired)
-#include "tkl_wifi_stub.h"
-#endif
-#if defined(ENABLE_WIRED) && (ENABLE_WIRED == 1)
-#include "netconn_wired.h"
-#endif
-#if defined(ENABLE_LIBLWIP) && (ENABLE_LIBLWIP == 1)
-#include "lwip_init.h"
-#endif
+#include "tdl_display_manage.h"
+#include "tkl_jpeg_codec.h"
 
 #if defined(BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD) && (BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD == 1)
 #include "board_com_api.h"
@@ -49,235 +34,490 @@ static OPERATE_RET board_register_hardware(void)
 }
 #endif
 
-#include "app_chat_bot.h"
-#include "reset_netcfg.h"
 
-#if defined(ENABLE_QRCODE) && (ENABLE_QRCODE == 1)
-#include "qrencode_print.h"
+#if defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)
+#include "imu_ahrs.h"
+#endif
+#if defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)
+#include "mic_bringup.h"
+#endif
+#if defined(ENABLE_HARDWARE_MOTO) && (ENABLE_HARDWARE_MOTO == 1)
+#include "moto_bringup.h"
+#endif
+#if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)
+#include "touch_sensor.h"
+#endif
+#if defined(ENABLE_COMP_AI_AUDIO) && (ENABLE_COMP_AI_AUDIO == 1)
+#include "ai_audio_player.h"
+#include "tdl_audio_manage.h"
 #endif
 
-/* Tuya device handle */
-tuya_iot_client_t ai_client;
-
-/* Tuya license information (uuid authkey) */
-tuya_iot_license_t license;
+#include "lcd_asset_types.h"
+#include "left_eye_lcd_assets.h"
+#include "right_eye_lcd_assets.h"
+#include "test_audio_assets.h"
 
 #ifndef PROJECT_VERSION
 #define PROJECT_VERSION "1.0.0"
 #endif
 
-#define DPID_VOLUME 6
-
-static uint8_t _need_reset = 0;
-
-
-/**
- * @brief user defined log output api, in this demo, it will use uart0 as log-tx
- *
- * @param str log string
- * @return void
- */
-void user_log_output_cb(const char *str)
-{
-    tal_uart_write(TUYA_UART_NUM_0, (const uint8_t *)str, strlen(str));
-}
-
-/**
- * @brief user defined upgrade notify callback, it will notify device a OTA request received
- *
- * @param client device info
- * @param upgrade the upgrade request info
- * @return void
- */
-void user_upgrade_notify_on(tuya_iot_client_t *client, cJSON *upgrade)
-{
-    PR_INFO("----- Upgrade information -----");
-    PR_INFO("OTA Channel: %d", cJSON_GetObjectItem(upgrade, "type")->valueint);
-    PR_INFO("Version: %s", cJSON_GetObjectItem(upgrade, "version")->valuestring);
-    PR_INFO("Size: %s", cJSON_GetObjectItem(upgrade, "size")->valuestring);
-    PR_INFO("MD5: %s", cJSON_GetObjectItem(upgrade, "md5")->valuestring);
-    PR_INFO("HMAC: %s", cJSON_GetObjectItem(upgrade, "hmac")->valuestring);
-    PR_INFO("URL: %s", cJSON_GetObjectItem(upgrade, "url")->valuestring);
-    PR_INFO("HTTPS URL: %s", cJSON_GetObjectItem(upgrade, "httpsUrl")->valuestring);
-}
-
-OPERATE_RET user_dp_obj_proc(dp_obj_recv_t *dpobj)
-{
-    PR_DEBUG("=== user_dp_obj_proc called ===");
-    PR_DEBUG("DP object - dpscnt: %d, devid: %s", dpobj->dpscnt, dpobj->devid ? dpobj->devid : "NULL");
-    
-    uint32_t index = 0;
-    for (index = 0; index < dpobj->dpscnt; index++) {
-        dp_obj_t *dp = dpobj->dps + index;
-        PR_DEBUG("idx:%d dpid:%d type:%d ts:%u", index, dp->id, dp->type, dp->time_stamp);
-
-        switch (dp->id) {
-        case DPID_VOLUME: {
-            uint8_t volume = dp->value.dp_value;
-            PR_DEBUG("volume:%d", volume);
-            ai_chat_set_volume(volume);
-#if defined(ENABLE_CHAT_DISPLAY) && (ENABLE_CHAT_DISPLAY == 1)
-            char volume_str[20] = {0};
-            snprintf(volume_str, sizeof(volume_str), "%s%d", VOLUME, volume);
-            ai_ui_disp_msg(AI_UI_DISP_NOTIFICATION, (uint8_t *)volume_str, strlen(volume_str));
+#define PRINTF_FREE_HEAP_TTIME (10 * 1000)
+#if defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)
+#define IMU_POLL_TIME          (5)
+#define IMU_STATUS_TIME        (20)
 #endif
-            break;
+#if defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)
+#define MIC_STATUS_TIME        (50)
+#endif
+#if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)
+#define TOUCH_POLL_TIME        (50)
+#define TOUCH_CH_CNT           (3)
+#endif
+#if defined(ENABLE_HARDWARE_LCD) && (ENABLE_HARDWARE_LCD == 1)
+#define LOCAL_LCD_ANIM_INTERVAL_MS (40)
+#define LOCAL_LCD_BUF_MAX_SIZE     (160U * 160U * 2U)
+#define LOCAL_LCD_FLUSH_WAIT_MS    (200)
+#endif
+
+static TIMER_ID sg_printf_heap_tm;
+#if defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)
+static TIMER_ID sg_imu_poll_tm;
+static TIMER_ID sg_imu_status_tm;
+#endif
+#if defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)
+static TIMER_ID sg_mic_status_tm;
+#endif
+#if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)
+static TIMER_ID sg_touch_poll_tm;
+static uint8_t sg_touch_last_mask;
+#endif
+#if defined(ENABLE_HARDWARE_LCD) && (ENABLE_HARDWARE_LCD == 1)
+static THREAD_HANDLE sg_lcd_anim_thread = NULL;
+static TDL_DISP_HANDLE_T sg_lcd_left_disp = NULL;
+static TDL_DISP_HANDLE_T sg_lcd_right_disp = NULL;
+static TDL_DISP_DEV_INFO_T sg_lcd_left_info;
+static TDL_DISP_DEV_INFO_T sg_lcd_right_info;
+static uint8_t *sg_lcd_left_decode_buf = NULL;
+static uint8_t *sg_lcd_right_decode_buf = NULL;
+static uint32_t sg_lcd_decode_buf_size = 0;
+static SEM_HANDLE sg_lcd_left_flush_sem = NULL;
+static SEM_HANDLE sg_lcd_right_flush_sem = NULL;
+#endif
+#if defined(ENABLE_COMP_AI_AUDIO) && (ENABLE_COMP_AI_AUDIO == 1)
+static THREAD_HANDLE sg_audio_once_thread = NULL;
+#endif
+
+static void __local_printf_free_heap_tm_cb(TIMER_ID timer_id, void *arg)
+{
+#if defined(ENABLE_EXT_RAM) && (ENABLE_EXT_RAM == 1)
+    uint32_t free_heap       = tal_system_get_free_heap_size();
+    uint32_t free_psram_heap = tal_psram_get_free_heap_size();
+    PR_INFO("Free heap size:%d, Free psram heap size:%d", free_heap, free_psram_heap);
+#else
+    uint32_t free_heap = tal_system_get_free_heap_size();
+    PR_INFO("Free heap size:%d", free_heap);
+#endif
+}
+
+#if defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)
+static void __local_mic_status_tm_cb(TIMER_ID timer_id, void *arg)
+{
+    uint32_t frames_1s = 0;
+    uint32_t rms_permille = 0;
+    const char *status = "NO_DATA";
+
+    (void)timer_id;
+    (void)arg;
+
+    if (mic_bringup_get_status(&frames_1s, &rms_permille) != OPRT_OK) {
+        return;
+    }
+    if (frames_1s > 0) {
+        status = "OK";
+    }
+    PR_NOTICE("[MIC] frames_1s=%u rms=%u status=%s", (unsigned)frames_1s, (unsigned)rms_permille, status);
+}
+#endif
+
+#if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)
+static void __local_touch_poll_tm_cb(TIMER_ID timer_id, void *arg)
+{
+    uint8_t mask = 0;
+    bool touched = false;
+
+    (void)timer_id;
+    (void)arg;
+
+    for (uint8_t ch = 0; ch < TOUCH_CH_CNT; ch++) {
+        if (touch_sensor_read_channel(ch, &touched) != OPRT_OK) {
+            continue;
         }
-        default:
-            break;
+        if (touched) {
+            mask |= (1U << ch);
         }
     }
 
+    if (mask != sg_touch_last_mask) {
+        for (uint8_t ch = 0; ch < TOUCH_CH_CNT; ch++) {
+            uint8_t bit = (1U << ch);
+            if ((mask & bit) == (sg_touch_last_mask & bit)) {
+                continue;
+            }
+            PR_NOTICE("[TOUCH] ch=%u pin=%d touched=%u", (unsigned)ch, (int)touch_sensor_get_pin_channel(ch),
+                      (unsigned)((mask & bit) ? 1 : 0));
+        }
+        sg_touch_last_mask = mask;
+    }
+}
+#endif
+
+#if defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)
+static void __local_imu_poll_tm_cb(TIMER_ID timer_id, void *arg)
+{
+    (void)timer_id;
+    (void)arg;
+    imu_ahrs_poll();
+}
+
+static void __local_imu_status_tm_cb(TIMER_ID timer_id, void *arg)
+{
+    IMU_AHRS_STATUS_T status;
+
+    (void)timer_id;
+    (void)arg;
+    if (imu_ahrs_get_status(&status) != OPRT_OK) {
+        return;
+    }
+    PR_NOTICE("[IMU] who=0x%02X roll=%.2f pitch=%.2f yaw=%.2f temp=%.2f samples=%u calibrated=%u ax=%.4f ay=%.4f az=%.4f anorm=%.4f gx=%.3f gy=%.3f gz=%.3f",
+              status.who_am_i, (double)status.roll_deg, (double)status.pitch_deg, (double)status.yaw_deg,
+              (double)status.temp_c, (unsigned)status.sample_count, status.calibrated ? 1u : 0u,
+              (double)status.ax_mps2, (double)status.ay_mps2, (double)status.az_mps2,
+              (double)status.accel_norm_mps2, (double)status.gx_dps, (double)status.gy_dps, (double)status.gz_dps);
+}
+#endif
+
+#if defined(ENABLE_HARDWARE_LCD) && (ENABLE_HARDWARE_LCD == 1)
+static OPERATE_RET __local_lcd_open_one(const char *name, TDL_DISP_HANDLE_T *out_disp, TDL_DISP_DEV_INFO_T *out_info)
+{
+    OPERATE_RET rt = OPRT_OK;
+    TDL_DISP_HANDLE_T disp = NULL;
+
+    disp = tdl_disp_find_dev((char *)name);
+    if (disp == NULL) {
+        PR_WARN("[LOCAL][LCD] display '%s' not found", name);
+        return OPRT_COM_ERROR;
+    }
+
+    TUYA_CALL_ERR_RETURN(tdl_disp_dev_open(disp));
+    TUYA_CALL_ERR_LOG(tdl_disp_set_brightness(disp, 100));
+    TUYA_CALL_ERR_RETURN(tdl_disp_dev_get_info(disp, out_info));
+    *out_disp = disp;
+
+    PR_NOTICE("[LOCAL][LCD] open %s ok: %ux%u fmt=%d swap=%u", name,
+              (unsigned)out_info->width, (unsigned)out_info->height,
+              (int)out_info->fmt, (unsigned)(out_info->is_swap ? 1 : 0));
+
+    return rt;
+}
+
+static void __local_lcd_flush_done_cb(TDL_DISP_FRAME_BUFF_T *frame_buff)
+{
+    if (frame_buff == NULL || frame_buff->free_arg == NULL) {
+        return;
+    }
+
+    tal_semaphore_post((SEM_HANDLE)frame_buff->free_arg);
+}
+
+static OPERATE_RET __local_lcd_render_one(TDL_DISP_HANDLE_T disp, TDL_DISP_DEV_INFO_T *disp_info,
+                                          uint8_t *decode_buf, uint32_t decode_buf_size, SEM_HANDLE flush_sem,
+                                          const uint8_t *jpg_data, uint32_t jpg_len, const char *name)
+{
+    OPERATE_RET rt = OPRT_OK;
+    TKL_JPEG_CODEC_INFO_T jpeg_info = {0};
+    TDL_DISP_FRAME_BUFF_T fb = {0};
+    uint32_t need_size = 0;
+    uint32_t pixel_cnt = 0;
+
+    if (disp == NULL || disp_info == NULL || decode_buf == NULL || jpg_data == NULL || jpg_len == 0) {
+        return OPRT_INVALID_PARM;
+    }
+
+    TUYA_CALL_ERR_RETURN(tkl_jpeg_codec_img_info_get((uint8_t *)jpg_data, jpg_len, &jpeg_info));
+
+    need_size = (uint32_t)jpeg_info.out_width * (uint32_t)jpeg_info.out_height * 2U;
+    if (need_size > decode_buf_size) {
+        PR_ERR("[LOCAL][LCD] frame %s oversize: need=%u buf=%u", name, (unsigned)need_size,
+               (unsigned)decode_buf_size);
+        return OPRT_COM_ERROR;
+    }
+
+    TUYA_CALL_ERR_RETURN(
+        tkl_jpeg_codec_convert((uint8_t *)jpg_data, decode_buf, &jpeg_info, JPEG_DEC_OUT_RGB565));
+
+    fb.fmt = TUYA_PIXEL_FMT_RGB565;
+    fb.x_start = 0;
+    fb.y_start = 0;
+    fb.width = jpeg_info.out_width;
+    fb.height = jpeg_info.out_height;
+    fb.len = need_size;
+    fb.frame = decode_buf;
+    fb.free_cb = __local_lcd_flush_done_cb;
+    fb.free_arg = flush_sem;
+
+    pixel_cnt = (uint32_t)jpeg_info.out_width * (uint32_t)jpeg_info.out_height;
+    if (disp_info->is_swap) {
+        TUYA_CALL_ERR_LOG(tdl_disp_dev_rgb565_swap((uint16_t *)decode_buf, pixel_cnt));
+    }
+    TUYA_CALL_ERR_LOG(tdl_disp_dev_flush(disp, &fb));
+    TUYA_CALL_ERR_RETURN(tal_semaphore_wait(flush_sem, LOCAL_LCD_FLUSH_WAIT_MS));
+
+    return rt;
+}
+
+static void __local_lcd_anim_task(void *arg)
+{
+    OPERATE_RET rt = OPRT_OK;
+    uint32_t left_idx = 0;
+    uint32_t right_idx = 0;
+
+    (void)arg;
+    if (g_left_eye_lcd_frame_count == 0 || g_right_eye_lcd_frame_count == 0) {
+        PR_WARN("[LOCAL][LCD] left/right eye frame asset missing");
+        return;
+    }
+
+    PR_NOTICE("[LOCAL][LCD] dual animation loop start, left=%u right=%u interval=%ums",
+              (unsigned)g_left_eye_lcd_frame_count, (unsigned)g_right_eye_lcd_frame_count,
+              (unsigned)LOCAL_LCD_ANIM_INTERVAL_MS);
+
+    while (1) {
+        const LOCAL_LCD_FRAME_T *left_frame = &g_left_eye_lcd_frames[left_idx];
+        const LOCAL_LCD_FRAME_T *right_frame = &g_right_eye_lcd_frames[right_idx];
+
+        if (sg_lcd_left_disp != NULL) {
+            TUYA_CALL_ERR_LOG(__local_lcd_render_one(
+                sg_lcd_left_disp, &sg_lcd_left_info, sg_lcd_left_decode_buf, sg_lcd_decode_buf_size,
+                sg_lcd_left_flush_sem,
+                left_frame->data, left_frame->len, left_frame->name));
+        }
+        if (sg_lcd_right_disp != NULL) {
+            TUYA_CALL_ERR_LOG(__local_lcd_render_one(
+                sg_lcd_right_disp, &sg_lcd_right_info, sg_lcd_right_decode_buf, sg_lcd_decode_buf_size,
+                sg_lcd_right_flush_sem,
+                right_frame->data, right_frame->len, right_frame->name));
+        }
+
+        left_idx++;
+        if (left_idx >= g_left_eye_lcd_frame_count) {
+            left_idx = 0;
+        }
+        right_idx++;
+        if (right_idx >= g_right_eye_lcd_frame_count) {
+            right_idx = 0;
+        }
+        tal_system_sleep(LOCAL_LCD_ANIM_INTERVAL_MS);
+    }
+}
+
+static OPERATE_RET __local_lcd_anim_init(void)
+{
+    OPERATE_RET rt = OPRT_OK;
+    THREAD_CFG_T cfg = {0};
+
+    TUYA_CALL_ERR_LOG(__local_lcd_open_one("display", &sg_lcd_left_disp, &sg_lcd_left_info));
+    TUYA_CALL_ERR_LOG(__local_lcd_open_one("display2", &sg_lcd_right_disp, &sg_lcd_right_info));
+
+    if (sg_lcd_left_disp == NULL && sg_lcd_right_disp == NULL) {
+        PR_WARN("[LOCAL][LCD] no display opened for dual-eye mode");
+        return OPRT_COM_ERROR;
+    }
+
+    TUYA_CALL_ERR_RETURN(tkl_jpeg_codec_init());
+
+    sg_lcd_decode_buf_size = LOCAL_LCD_BUF_MAX_SIZE;
+    sg_lcd_left_decode_buf = (uint8_t *)tal_malloc(sg_lcd_decode_buf_size);
+    sg_lcd_right_decode_buf = (uint8_t *)tal_malloc(sg_lcd_decode_buf_size);
+    TUYA_CHECK_NULL_RETURN(sg_lcd_left_decode_buf, OPRT_MALLOC_FAILED);
+    TUYA_CHECK_NULL_RETURN(sg_lcd_right_decode_buf, OPRT_MALLOC_FAILED);
+    TUYA_CALL_ERR_RETURN(tal_semaphore_create_init(&sg_lcd_left_flush_sem, 0, 1));
+    TUYA_CALL_ERR_RETURN(tal_semaphore_create_init(&sg_lcd_right_flush_sem, 0, 1));
+    memset(sg_lcd_left_decode_buf, 0, sg_lcd_decode_buf_size);
+    memset(sg_lcd_right_decode_buf, 0, sg_lcd_decode_buf_size);
+
+    cfg.stackDepth = 4096;
+    cfg.priority = THREAD_PRIO_2;
+    cfg.thrdname = "lcd_anim";
+    TUYA_CALL_ERR_RETURN(
+        tal_thread_create_and_start(&sg_lcd_anim_thread, NULL, NULL, __local_lcd_anim_task, NULL, &cfg));
+
+    PR_NOTICE("[LOCAL][LCD] dual-eye init ok, left=%u right=%u decode_buf=%u bytes",
+              (unsigned)(sg_lcd_left_disp != NULL ? 1 : 0),
+              (unsigned)(sg_lcd_right_disp != NULL ? 1 : 0),
+              (unsigned)sg_lcd_decode_buf_size);
+    return rt;
+}
+#endif
+
+#if defined(ENABLE_COMP_AI_AUDIO) && (ENABLE_COMP_AI_AUDIO == 1)
+static void __local_audio_play_once_task(void *arg)
+{
+    OPERATE_RET rt = OPRT_OK;
+    const LOCAL_AUDIO_CLIP_T *clip = NULL;
+    const uint32_t chunk_size = 2048;
+    uint32_t offset = 0;
+
+    (void)arg;
+
+    if (g_test_audio_clip_count == 0) {
+        PR_WARN("[LOCAL][AUDIO] no clip for once-play task");
+        return;
+    }
+
+    clip = &g_test_audio_clips[0];
+    PR_NOTICE("[LOCAL][AUDIO] once-play task start: %s total=%u", clip->name, (unsigned)clip->len);
+
+    TUYA_CALL_ERR_LOG(ai_audio_play_tts_stream(AI_AUDIO_PLAYER_TTS_START, AI_AUDIO_CODEC_MP3, NULL, 0));
+
+    while (offset < clip->len) {
+        uint32_t remain = clip->len - offset;
+        uint32_t send_len = (remain > chunk_size) ? chunk_size : remain;
+
+        TUYA_CALL_ERR_LOG(ai_audio_play_tts_stream(AI_AUDIO_PLAYER_TTS_DATA, AI_AUDIO_CODEC_MP3,
+                                                   (char *)(clip->data + offset), send_len));
+        offset += send_len;
+        tal_system_sleep(20);
+    }
+
+    TUYA_CALL_ERR_LOG(ai_audio_play_tts_stream(AI_AUDIO_PLAYER_TTS_STOP, AI_AUDIO_CODEC_MP3, NULL, 0));
+    PR_NOTICE("[LOCAL][AUDIO] once-play task finished: sent=%u", (unsigned)offset);
+}
+
+static OPERATE_RET __local_audio_play_test(void)
+{
+    OPERATE_RET rt = OPRT_OK;
+    TUYA_GPIO_BASE_CFG_T spk_gpio_cfg = {0};
+    TDL_AUDIO_HANDLE_T audio_hdl = NULL;
+    THREAD_CFG_T cfg = {0};
+
+    if (g_test_audio_clip_count == 0) {
+        PR_WARN("[LOCAL][AUDIO] no mp3 clip asset found");
+        return OPRT_COM_ERROR;
+    }
+
+    /* ai_player's speaker consumer only does find(), not open().
+     * In local mode we open audio driver explicitly to bring up tkl_ai_init/start. */
+    TUYA_CALL_ERR_RETURN(tdl_audio_find(AUDIO_CODEC_NAME, &audio_hdl));
+    TUYA_CALL_ERR_RETURN(tdl_audio_open(audio_hdl, NULL));
+    PR_NOTICE("[LOCAL][AUDIO] tdl_audio_open(%s) ok", AUDIO_CODEC_NAME);
+
+    TUYA_CALL_ERR_RETURN(ai_audio_player_init());
+    TUYA_CALL_ERR_LOG(ai_audio_player_set_vol(70));
+
+    /* Force PA enable level once in local mode:
+     * libtech_pop_t5ai_board.c uses P39 with spk_pin_polarity=LOW (mute level),
+     * so HIGH should be playback-enable for this board. */
+    spk_gpio_cfg.mode = TUYA_GPIO_PUSH_PULL;
+    spk_gpio_cfg.direct = TUYA_GPIO_OUTPUT;
+    spk_gpio_cfg.level = TUYA_GPIO_LEVEL_HIGH;
+    TUYA_CALL_ERR_LOG(tkl_gpio_init(TUYA_GPIO_NUM_39, &spk_gpio_cfg));
+    TUYA_CALL_ERR_LOG(tkl_gpio_write(TUYA_GPIO_NUM_39, TUYA_GPIO_LEVEL_HIGH));
+    PR_NOTICE("[LOCAL][AUDIO] force PA enable GPIO P39=HIGH");
+
+    cfg.stackDepth = 3072;
+    cfg.priority = THREAD_PRIO_2;
+    cfg.thrdname = "audio_once";
+    TUYA_CALL_ERR_RETURN(
+        tal_thread_create_and_start(&sg_audio_once_thread, NULL, NULL, __local_audio_play_once_task, NULL, &cfg));
+
+    PR_NOTICE("[LOCAL][AUDIO] play clip: %s len=%u", g_test_audio_clips[0].name, (unsigned)g_test_audio_clips[0].len);
+    return rt;
+}
+#endif
+
+static OPERATE_RET app_local_hw_init(void)
+{
+    OPERATE_RET rt = OPRT_OK;
+
+    PR_NOTICE("[LOCAL] hardware-only init start");
+
+    tal_sw_timer_create(__local_printf_free_heap_tm_cb, NULL, &sg_printf_heap_tm);
+    tal_sw_timer_start(sg_printf_heap_tm, PRINTF_FREE_HEAP_TTIME, TAL_TIMER_CYCLE);
+
+#if defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)
+    rt = imu_ahrs_init();
+    if (rt == OPRT_OK) {
+        tal_sw_timer_create(__local_imu_poll_tm_cb, NULL, &sg_imu_poll_tm);
+        tal_sw_timer_start(sg_imu_poll_tm, IMU_POLL_TIME, TAL_TIMER_CYCLE);
+        tal_sw_timer_create(__local_imu_status_tm_cb, NULL, &sg_imu_status_tm);
+        tal_sw_timer_start(sg_imu_status_tm, IMU_STATUS_TIME, TAL_TIMER_CYCLE);
+        PR_NOTICE("[LOCAL][IMU] init ok");
+    } else {
+        PR_WARN("[LOCAL][IMU] init failed: %d (optional)", rt);
+    }
+#endif
+
+#if defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)
+    TUYA_CALL_ERR_LOG(mic_bringup_init());
+    tal_sw_timer_create(__local_mic_status_tm_cb, NULL, &sg_mic_status_tm);
+    tal_sw_timer_start(sg_mic_status_tm, MIC_STATUS_TIME, TAL_TIMER_CYCLE);
+    PR_WARN("[LOCAL][MIC] AI pipeline disabled in local mode, mic frames may remain zero");
+#endif
+
+#if defined(ENABLE_HARDWARE_MOTO) && (ENABLE_HARDWARE_MOTO == 1)
+    rt = moto_bringup_init();
+    if (rt != OPRT_OK) {
+        PR_WARN("[LOCAL][MOTO] init failed: %d (optional)", rt);
+    } else {
+        PR_NOTICE("[LOCAL][MOTO] init ok");
+    }
+#endif
+
+#if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)
+    {
+        TOUCH_SENSOR_CFG_T cfgs[TOUCH_CH_CNT] = {
+            {.gpio_pin = TUYA_GPIO_NUM_26, .active_level = TUYA_GPIO_LEVEL_HIGH, .pull = TUYA_GPIO_PULLDOWN},
+            {.gpio_pin = TUYA_GPIO_NUM_22, .active_level = TUYA_GPIO_LEVEL_HIGH, .pull = TUYA_GPIO_PULLDOWN},
+            {.gpio_pin = TUYA_GPIO_NUM_23, .active_level = TUYA_GPIO_LEVEL_HIGH, .pull = TUYA_GPIO_PULLDOWN},
+        };
+        bool touch_enabled = true;
+
+        sg_touch_last_mask = 0;
+        for (uint8_t ch = 0; ch < TOUCH_CH_CNT; ch++) {
+            rt = touch_sensor_init_channel(ch, &cfgs[ch]);
+            if (rt != OPRT_OK) {
+                PR_WARN("[LOCAL][TOUCH] init failed: ch=%u rt=%d (optional)", (unsigned)ch, rt);
+                touch_enabled = false;
+                break;
+            }
+        }
+
+        if (touch_enabled) {
+            tal_sw_timer_create(__local_touch_poll_tm_cb, NULL, &sg_touch_poll_tm);
+            tal_sw_timer_start(sg_touch_poll_tm, TOUCH_POLL_TIME, TAL_TIMER_CYCLE);
+            PR_NOTICE("[LOCAL][TOUCH] init ok, polling %ums on P26/P22/P23", TOUCH_POLL_TIME);
+        }
+    }
+#endif
+
+#if defined(ENABLE_COMP_AI_AUDIO) && (ENABLE_COMP_AI_AUDIO == 1)
+    rt = __local_audio_play_test();
+    if (rt != OPRT_OK) {
+        PR_WARN("[LOCAL][AUDIO] init/play failed: %d (optional)", rt);
+    }
+#endif
+
+#if defined(ENABLE_HARDWARE_LCD) && (ENABLE_HARDWARE_LCD == 1)
+    rt = __local_lcd_anim_init();
+    if (rt != OPRT_OK) {
+        PR_WARN("[LOCAL][LCD] animation init failed: %d (optional)", rt);
+    }
+#endif
+
+    PR_NOTICE("[LOCAL] hardware-only init done");
     return OPRT_OK;
 }
 
-OPERATE_RET ai_audio_volume_upload(void)
-{
-    tuya_iot_client_t *client = tuya_iot_client_get();
-    dp_obj_t dp_obj = {0};
-
-    uint8_t volume = ai_chat_get_volume();
-
-    dp_obj.id = DPID_VOLUME;
-    dp_obj.type = PROP_VALUE;
-    dp_obj.value.dp_value = volume;
-
-    PR_DEBUG("DP upload volume:%d", volume);
-
-    return tuya_iot_dp_obj_report(client, client->activate.devid, &dp_obj, 1, 0);
-}
-
-/**
- * @brief user defined event handler
- *
- * @param client device info
- * @param event the event info
- * @return void
- */
-void user_event_handler_on(tuya_iot_client_t *client, tuya_event_msg_t *event)
-{
-    PR_DEBUG("Tuya Event ID:%d(%s)", event->id, EVENT_ID2STR(event->id));
-    PR_INFO("Device Free heap %d", tal_system_get_free_heap_size());
-
-    switch (event->id) {
-    case TUYA_EVENT_BIND_START:
-        PR_INFO("Device Bind Start!");
-        if (_need_reset == 1) {
-            PR_INFO("Device Reset!");
-            tal_system_reset();
-        }
-
-        #if defined(ENABLE_COMP_AI_AUDIO) && (ENABLE_COMP_AI_AUDIO == 1)
-        ai_audio_player_alert(AI_AUDIO_ALERT_NETWORK_CFG);
-        #endif
-        
-        break;
-
-    /* Print the QRCode for Tuya APP bind */
-    case TUYA_EVENT_DIRECT_MQTT_CONNECTED: {
-#if defined(ENABLE_QRCODE) && (ENABLE_QRCODE == 1)
-        char buffer[255];
-        sprintf(buffer, "https://smartapp.tuya.com/s/p?p=%s&uuid=%s&v=2.0", TUYA_PRODUCT_ID, license.uuid);
-        qrcode_string_output(buffer, user_log_output_cb, 0);
-#endif
-    } break;
-
-    case TUYA_EVENT_BIND_TOKEN_ON:
-        break;
-
-    /* MQTT with tuya cloud is connected, device online */
-    case TUYA_EVENT_MQTT_CONNECTED:
-        PR_INFO("Device MQTT Connected!");
-        tal_event_publish(EVENT_MQTT_CONNECTED, NULL);
-
-        static uint8_t first = 1;
-        if (first) {
-            first = 0;
-
-#if defined(ENABLE_CHAT_DISPLAY) && (ENABLE_CHAT_DISPLAY == 1)
-            UI_WIFI_STATUS_E wifi_status = UI_WIFI_STATUS_GOOD;
-            ai_ui_disp_msg(AI_UI_DISP_NETWORK, (uint8_t *)&wifi_status, sizeof(UI_WIFI_STATUS_E));
-#endif
-            ai_audio_volume_upload();
-        }
-        break;
-
-    /* MQTT with tuya cloud is disconnected, device offline */
-    case TUYA_EVENT_MQTT_DISCONNECT:
-        PR_INFO("Device MQTT DisConnected!");
-        tal_event_publish(EVENT_MQTT_DISCONNECTED, NULL);
-        break;
-
-    /* RECV upgrade request */
-    case TUYA_EVENT_UPGRADE_NOTIFY:
-        user_upgrade_notify_on(client, event->value.asJSON);
-        break;
-
-    /* Sync time with tuya Cloud */
-    case TUYA_EVENT_TIMESTAMP_SYNC:
-        PR_INFO("Sync timestamp:%d", event->value.asInteger);
-        tal_time_set_posix(event->value.asInteger, 1);
-        tal_event_publish("app.time.sync", NULL);
-        break;
-
-    case TUYA_EVENT_RESET:
-        PR_INFO("Device Reset:%d", event->value.asInteger);
-
-        _need_reset = 1;
-        break;
-
-    /* RECV OBJ DP */
-    case TUYA_EVENT_DP_RECEIVE_OBJ: {
-        dp_obj_recv_t *dpobj = event->value.dpobj;
-        PR_DEBUG("SOC Rev DP Cmd t1:%d t2:%d CNT:%u", dpobj->cmd_tp, dpobj->dtt_tp, dpobj->dpscnt);
-        if (dpobj->devid != NULL) {
-            PR_DEBUG("devid.%s", dpobj->devid);
-        }
-
-        user_dp_obj_proc(dpobj);
-
-        tuya_iot_dp_obj_report(client, dpobj->devid, dpobj->dps, dpobj->dpscnt, 0);
-
-    } break;
-
-    /* RECV RAW DP */
-    case TUYA_EVENT_DP_RECEIVE_RAW: {
-        dp_raw_recv_t *dpraw = event->value.dpraw;
-        PR_DEBUG("SOC Rev DP Cmd t1:%d t2:%d", dpraw->cmd_tp, dpraw->dtt_tp);
-        if (dpraw->devid != NULL) {
-            PR_DEBUG("devid.%s", dpraw->devid);
-        }
-
-        uint32_t index = 0;
-        dp_raw_t *dp = &dpraw->dp;
-        PR_DEBUG("dpid:%d type:RAW len:%d data:", dp->id, dp->len);
-        for (index = 0; index < dp->len; index++) {
-            PR_DEBUG_RAW("%02x", dp->data[index]);
-        }
-        PR_DEBUG_RAW("\n");
-
-        //tuya_iot_dp_raw_report(client, dpraw->devid, &dpraw->dp, 3);
-
-    } break;
-
-    default:
-        break;
-    }
-}
-
-/**
- * @brief user defined network check callback, it will check the network every 1sec,
- *        in this demo it alwasy return ture due to it's a wired demo
- *
- * @return true
- * @return false
- */
-bool user_network_check(void)
-{
-    netmgr_status_e status = NETMGR_LINK_DOWN;
-    netmgr_conn_get(NETCONN_AUTO, NETCONN_CMD_STATUS, &status);
-    return status == NETMGR_LINK_DOWN ? false : true;
-}
 
 void user_main(void)
 {
@@ -310,69 +550,20 @@ void user_main(void)
     tal_workq_init();
     tal_time_service_init();
     tal_cli_init();
-    tuya_authorize_init();
-
-    reset_netconfig_start();
-
-    if (OPRT_OK != tuya_authorize_read(&license)) {
-        license.uuid = TUYA_OPENSDK_UUID;
-        license.authkey = TUYA_OPENSDK_AUTHKEY;
-        PR_WARN("Replace the TUYA_OPENSDK_UUID and TUYA_OPENSDK_AUTHKEY contents, otherwise the demo cannot work.\n \
-                Visit https://platform.tuya.com/purchase/index?type=6 to get the open-sdk uuid and authkey.");
-    }
-
-    /* Initialize Tuya device configuration */
-    ret = tuya_iot_init(&ai_client, &(const tuya_iot_config_t){
-                                        .software_ver = PROJECT_VERSION,
-                                        .productkey = TUYA_PRODUCT_ID,
-                                        .uuid = license.uuid,
-                                        .authkey = license.authkey,
-                                        // .firmware_key      = TUYA_DEVICE_FIRMWAREKEY,
-                                        .event_handler = user_event_handler_on,
-                                        .network_check = user_network_check,
-                                    });
-    assert(ret == OPRT_OK);
-
-#if defined(ENABLE_LIBLWIP) && (ENABLE_LIBLWIP == 1)
-    TUYA_LwIP_Init();
-#endif
-
-    // network init
-    netmgr_type_e type = 0;
-#if defined(ENABLE_WIFI) && (ENABLE_WIFI == 1)
-    type |= NETCONN_WIFI;
-#endif
-#if defined(ENABLE_WIRED) && (ENABLE_WIRED == 1)
-    type |= NETCONN_WIRED;
-#endif
-    netmgr_init(type);
-#if defined(ENABLE_WIFI) && (ENABLE_WIFI == 1)
-    netmgr_conn_set(NETCONN_WIFI, NETCONN_CMD_NETCFG, &(netcfg_args_t){.type = NETCFG_TUYA_BLE | NETCFG_TUYA_WIFI_AP});
-#endif
-
-    PR_DEBUG("tuya_iot_init success");
 
     ret = board_register_hardware();
     if (ret != OPRT_OK) {
         PR_ERR("board_register_hardware failed");
     }
 
-    ret = app_chat_bot_init();
+    PR_NOTICE("Local hardware-only mode enabled: cloud/netcfg is fully disabled");
+    ret = app_local_hw_init();
     if (ret != OPRT_OK) {
-        PR_ERR("app_chat_bot_init failed");
+        PR_ERR("app_local_hw_init failed: %d", ret);
     }
 
-
-    /* Start tuya iot task */
-    tuya_iot_start(&ai_client);
-
-    tkl_wifi_set_lp_mode(0, 0);
-
-    reset_netconfig_check();
-    
     for (;;) {
-        /* Loop to receive packets, and handles client keepalive */
-        tuya_iot_yield(&ai_client);
+        tal_system_sleep(1000);
     }
 }
 
