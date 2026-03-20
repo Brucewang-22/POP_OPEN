@@ -30,3 +30,38 @@
 [Notes]
 - 当前工作区仍存在未提交修改，请在下次归档前确认是否提交后再记录更高版本。
 - 本次归档版本按 PATCH 递增：`0.0.1` -> `0.0.2`。
+
+[Version] 0.0.3
+[Date] 2026-03-20 12:11:54
+[Scope]
+- apps/tuya.ai/your_pop_robot/CMakeLists.txt
+- apps/tuya.ai/your_pop_robot/src/tuya_main.c
+- apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/gen_lcd_arrays.py
+- apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/left_eye/test/...
+- apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/right_eye/test/...
+- apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/{left_eye,right_eye}/{doubt,happy,normal}/...
+- apps/tuya.ai/your_pop_robot/src/hardware/audio/sound_lib/{doubt,happy,normal}/...
+- apps/tuya.ai/your_pop_robot/src/interactive/...
+- apps/tuya.ai/your_pop_robot/src/interactive/HAL/include/hardware_abstraction.h
+- apps/tuya.ai/your_pop_robot/src/interactive/HAL/src/hardware_abstraction.c
+- apps/tuya.ai/your_pop_robot/src/interactive/HAL/include/input_trigger_layer.h
+- apps/tuya.ai/your_pop_robot/src/interactive/HAL/src/input_trigger_layer.c
+- apps/tuya.ai/your_pop_robot/src/interactive/HAL/include/output_hal.h
+- apps/tuya.ai/your_pop_robot/src/interactive/HAL/src/output_hal.c
+- apps/tuya.ai/your_pop_robot/src/interactive/python/gen_input_thresholds.py
+- apps/tuya.ai/your_pop_robot/src/interactive/python/gen_output_modes.py
+- apps/tuya.ai/your_pop_robot/src/interactive/yaml/input.yaml
+- apps/tuya.ai/your_pop_robot/src/interactive/yaml/output.yaml
+- apps/tuya.ai/your_pop_robot/hardware.yaml
+- rules/AGENT_DEV.md
+[Changes]
+- 记录当前工作区在 `your_pop_robot` 侧的增删改状态：包含构建入口、主流程、LCD 资源生成脚本、测试资源重命名替换、情绪资源目录新增、交互目录新增及硬件映射文件新增。
+- 记录 `left_eye/test` 与 `right_eye/test` 下旧版 `gen_lcd_assets.py` 与 `*_lcd_assets.{c,h}` 删除，同时存在 `*_test_lcd_assets.{c,h}` 新文件。
+- 记录规则文件 `rules/AGENT_DEV.md` 在当前工作区处于已修改状态（来源未在本条日志内追溯）。
+- 补充记录 interactive 输入/输出逻辑：新增硬件抽象层 `hardware_abstraction`，将 microphone/touch/imu 与 lcd/moto/audio 统一为函数表，并对未使能模块返回 `OPRT_NOT_SUPPORTED`。
+- 补充记录输入触发逻辑：新增 `input_trigger_layer`，基于阈值评估 microphone/touch/imu 三路触发；touch 实现“事件窗口计数”判定，imu 实现“重力范数区间 + 加速度/角速度命中计数”的连续命中触发。
+- 补充记录输出模式逻辑：新增 `output_hal` 三模式接口（LCD/Audio/Moto），包含 LCD 双屏帧渲染与刷新等待、音频初始化与分块播放、舵机参数化动作控制。
+- 补充记录配置生成链路：新增 `interactive/yaml/{input,output}.yaml` 与 `python` 生成脚本，将 YAML 参数转换为 C 宏头文件（输入阈值与输出模式配置），形成“参数文件 -> 编译期宏 -> HAL 行为”的配置路径。
+[Notes]
+- 按用户指令“开始归档”执行日志记录流程；本次未生成新的归档包（tar.gz）与补丁文件（patch）。
+- 本次版本按 PATCH 递增：`0.0.2` -> `0.0.3`。

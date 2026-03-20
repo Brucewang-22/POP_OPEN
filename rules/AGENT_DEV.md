@@ -27,6 +27,9 @@
 7. 阅读 `POP_OPEN/rules/CODE_STYLE.md`
    - 目标：明确代码风格统一化依据。
 
+7. 阅读 `POP_OPEN/rules/VERSIONING_README.md`
+   - 目标：明确代码日志生成。
+
 ## 文件读写约束
 - `POP_OPEN/agentme/` 内文件：只读。
 - `POP_OPEN/rules/DEVELOPMENT_README.md`：需用户允许后可修改。
@@ -35,6 +38,7 @@
 - `POP_OPEN/rules/VERSIONING_README.md`：只读。
 - `POP_OPEN/rules/PROMPT_ENGINEERING.md`：只读。
 - `POP_OPEN/rules/CODE_STYLE.md`：只读。
+- `POP_OPEN/rules/VERSIONING_README.md`:只读。
 
 ## 执行原则
 - 未完成上述阅读顺序前，不进入实现与改码阶段。

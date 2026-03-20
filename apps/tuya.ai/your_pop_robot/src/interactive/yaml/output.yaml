@@ -1,0 +1,44 @@
+# output 参数
+# 修改后需重新编译
+
+lcd:
+  # 字段: loop_time_ms(循环时长ms), fps(帧率)
+  model1:
+    loop_time_ms: 2000
+    fps: 25
+  model2:
+    loop_time_ms: 2000
+    fps: 25
+  model3:
+    loop_time_ms: 2000
+    fps: 25
+
+audio:
+  # 字段: volume(音量)
+  model1:
+    volume: 70
+  model2:
+    volume: 70
+  model3:
+    volume: 70
+
+moto:
+  # 字段: angle_deg(角度±deg), speed_dps(速度), loop(是否循环), hold_torque(是否保持力矩), run_time_ms(运行时长ms)
+  model1:
+    angle_deg: 30
+    speed_dps: 180
+    loop: true
+    hold_torque: true
+    run_time_ms: 2000
+  model2:
+    angle_deg: 30
+    speed_dps: 180
+    loop: true
+    hold_torque: true
+    run_time_ms: 2000
+  model3:
+    angle_deg: 30
+    speed_dps: 180
+    loop: true
+    hold_torque: true
+    run_time_ms: 2000

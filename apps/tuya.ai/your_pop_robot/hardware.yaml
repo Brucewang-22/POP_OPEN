@@ -1,0 +1,17 @@
+microphone:
+  min_frames_1s: 1
+  min_rms_permille: 10
+
+touch:
+  min_active_channels: 1
+  event_window_ms: 1000
+  min_events_in_window: 2
+
+imu:
+  require_calibrated: false
+  accel_norm_min_mps2: 8.0
+  accel_norm_max_mps2: 12.0
+  motion_accel_delta_min_mps2: 3.5
+  motion_gyro_axis_min_dps: 220.0
+  motion_min_consecutive_hits: 2
+
