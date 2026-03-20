@@ -1,0 +1,32 @@
+[Version] 0.0.1
+[Date] 2026-03-19 00:00:00
+[Scope]
+- 初始化版本记录机制
+[Changes]
+- 新建 VERSIONING_README.md
+- 新建 CHANGE.log
+[Notes]
+- 基线版本，从 0.0.1 开始逐级更新
+
+[Version] 0.0.2
+[Date] 2026-03-20 02:24:13 EDT
+[Scope]
+- apps/tuya.ai/your_pop_robot/README.md
+- apps/tuya.ai/your_pop_robot/build_flash.sh
+- apps/tuya.ai/your_pop_robot/CONNECTION.md
+- rules/DEVELOPMENT_README.md
+- rules/VERSIONING_README.md
+- rules/CHANGE.log
+- rules/AGENT_DEV.md
+- rules/CODE_STYLE.md
+- rules/PROMPT_ENGINEERING.md
+[Changes]
+- 文档体系整理：新增/重排 `your_pop_robot/README.md`，补充配置文件职责说明、新增硬件流程与 LED 接入示例，并修复关键文件说明表格错位问题。
+- 开发规范补充：新增 `rules/DEVELOPMENT_README.md`（环境初始化、选板、构建与烧录命令）；新增 `rules/VERSIONING_README.md` 与版本归档机制。
+- 版本机制落地：建立并启用 `rules/CHANGE.log`，按“收到开始归档后记录”的规则执行。
+- Agent 约束增强：新增 `rules/AGENT_DEV.md`，约束阅读顺序、读写权限、进度反馈要求与防幻觉规则（证据优先、未验证显式标注、禁止虚构执行结果等）。
+- 构建烧录可靠性提升：`build_flash.sh` 增加烧录前串口可用性检查；未检测到开发板或指定端口不存在时直接报错退出，避免未连接设备时误显示烧录完成。
+- 规则文件统一：`rules` 目录内规范文件命名统一为大写风格（`CODE_STYLE.md`、`PROMPT_ENGINEERING.md` 等）。
+[Notes]
+- 当前工作区仍存在未提交修改，请在下次归档前确认是否提交后再记录更高版本。
+- 本次归档版本按 PATCH 递增：`0.0.1` -> `0.0.2`。

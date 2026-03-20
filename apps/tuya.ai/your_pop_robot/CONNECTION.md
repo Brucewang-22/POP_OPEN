@@ -2,7 +2,7 @@
 
 本文档只记录确定的接线线序。
 
-**板型 TUYA_T5AI_POP**：GPIO 映射以此文档为唯一依据；选该板型时，Otto 与 Core（Ninja）逻辑均使用本线序表。
+**板型 TUYA_T5AI_POP**：GPIO 映射以此文档为唯一依据。
 
 ---
 
