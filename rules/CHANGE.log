@@ -1,0 +1,86 @@
+[Version] 0.0.1
+[Date] 2026-03-19 00:00:00
+[Scope]
+- 初始化版本记录机制
+[Changes]
+- 新建 VERSIONING_README.md
+- 新建 CHANGE.log
+[Notes]
+- 基线版本，从 0.0.1 开始逐级更新
+
+[Version] 0.0.2
+[Date] 2026-03-20 02:24:13 EDT
+[Scope]
+- apps/tuya.ai/your_pop_robot/README.md
+- apps/tuya.ai/your_pop_robot/build_flash.sh
+- apps/tuya.ai/your_pop_robot/CONNECTION.md
+- rules/DEVELOPMENT_README.md
+- rules/VERSIONING_README.md
+- rules/CHANGE.log
+- rules/AGENT_DEV.md
+- rules/CODE_STYLE.md
+- rules/PROMPT_ENGINEERING.md
+[Changes]
+- 文档体系整理：新增/重排 `your_pop_robot/README.md`，补充配置文件职责说明、新增硬件流程与 LED 接入示例，并修复关键文件说明表格错位问题。
+- 开发规范补充：新增 `rules/DEVELOPMENT_README.md`（环境初始化、选板、构建与烧录命令）；新增 `rules/VERSIONING_README.md` 与版本归档机制。
+- 版本机制落地：建立并启用 `rules/CHANGE.log`，按“收到开始归档后记录”的规则执行。
+- Agent 约束增强：新增 `rules/AGENT_DEV.md`，约束阅读顺序、读写权限、进度反馈要求与防幻觉规则（证据优先、未验证显式标注、禁止虚构执行结果等）。
+- 构建烧录可靠性提升：`build_flash.sh` 增加烧录前串口可用性检查；未检测到开发板或指定端口不存在时直接报错退出，避免未连接设备时误显示烧录完成。
+- 规则文件统一：`rules` 目录内规范文件命名统一为大写风格（`CODE_STYLE.md`、`PROMPT_ENGINEERING.md` 等）。
+[Notes]
+- 当前工作区仍存在未提交修改，请在下次归档前确认是否提交后再记录更高版本。
+- 本次归档版本按 PATCH 递增：`0.0.1` -> `0.0.2`。
+
+[Version] 0.0.3
+[Date] 2026-03-20 12:11:54
+[Scope]
+- apps/tuya.ai/your_pop_robot/CMakeLists.txt
+- apps/tuya.ai/your_pop_robot/src/tuya_main.c
+- apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/gen_lcd_arrays.py
+- apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/left_eye/test/...
+- apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/right_eye/test/...
+- apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/{left_eye,right_eye}/{doubt,happy,normal}/...
+- apps/tuya.ai/your_pop_robot/src/hardware/audio/sound_lib/{doubt,happy,normal}/...
+- apps/tuya.ai/your_pop_robot/src/interactive/...
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/include/hardware_abstraction.h
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/src/hardware_abstraction.c
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/include/input_trigger_layer.h
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/src/input_trigger_layer.c
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/include/output_hal.h
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/src/output_hal.c
+- apps/tuya.ai/your_pop_robot/src/interactive/python/gen_input_thresholds.py
+- apps/tuya.ai/your_pop_robot/src/interactive/python/gen_output_modes.py
+- apps/tuya.ai/your_pop_robot/src/interactive/yaml/input.yaml
+- apps/tuya.ai/your_pop_robot/src/interactive/yaml/output.yaml
+- apps/tuya.ai/your_pop_robot/hardware.yaml
+- rules/AGENT_DEV.md
+[Changes]
+- 记录当前工作区在 `your_pop_robot` 侧的增删改状态：包含构建入口、主流程、LCD 资源生成脚本、测试资源重命名替换、情绪资源目录新增、交互目录新增及硬件映射文件新增。
+- 记录 `left_eye/test` 与 `right_eye/test` 下旧版 `gen_lcd_assets.py` 与 `*_lcd_assets.{c,h}` 删除，同时存在 `*_test_lcd_assets.{c,h}` 新文件。
+- 记录规则文件 `rules/AGENT_DEV.md` 在当前工作区处于已修改状态（来源未在本条日志内追溯）。
+- 补充记录 interactive 输入/输出逻辑：新增硬件抽象层 `hardware_abstraction`，将 microphone/touch/imu 与 lcd/moto/audio 统一为函数表，并对未使能模块返回 `OPRT_NOT_SUPPORTED`。
+- 补充记录输入触发逻辑：新增 `input_trigger_layer`，基于阈值评估 microphone/touch/imu 三路触发；touch 实现“事件窗口计数”判定，imu 实现“重力范数区间 + 加速度/角速度命中计数”的连续命中触发。
+- 补充记录输出模式逻辑：新增 `output_hal` 三模式接口（LCD/Audio/Moto），包含 LCD 双屏帧渲染与刷新等待、音频初始化与分块播放、舵机参数化动作控制。
+- 补充记录配置生成链路：新增 `interactive/yaml/{input,output}.yaml` 与 `python` 生成脚本，将 YAML 参数转换为 C 宏头文件（输入阈值与输出模式配置），形成“参数文件 -> 编译期宏 -> HAL 行为”的配置路径。
+[Notes]
+- 按用户指令“开始归档”执行日志记录流程；本次未生成新的归档包（tar.gz）与补丁文件（patch）。
+- 本次版本按 PATCH 递增：`0.0.2` -> `0.0.3`。
+
+[Version] 0.0.4
+[Date] 2026-03-24 03:28:19 EDT
+[Scope]
+- apps/tuya.ai/your_pop_robot/CMakeLists.txt
+- apps/tuya.ai/your_pop_robot/config/LIBTECH_POP_T5AI_DECONFIG.config
+- apps/tuya.ai/your_pop_robot/src/tuya_main.c
+- apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/{left_eye,right_eye}/{doubt,happy,normal}/...
+- apps/tuya.ai/your_pop_robot/src/interactive/...
+- rules/CHANGE.log
+[Changes]
+- 记录当前工作区在 `your_pop_robot` 下的整体变更，并按用户要求将代码整理推送到新版本分支 `v0.0.4`。
+- 补充 LCD 资源序列：`left_eye/right_eye` 下 `happy` 与 `normal` 目录已补齐 `001.jpg` 到 `032.jpg`，用于与现有序列资源保持一致。
+- 记录 interactive 目录重构状态：旧路径 `src/interactive/HAL/...` 删除，新路径 `src/interactive/hal/...` 与 `src/interactive/behavior/...` 处于当前版本提交范围内。
+- 记录当前工作区同时包含构建入口、配置文件、主流程与 LCD 资产生成结果等改动，一并归入本次版本提交。
+[Notes]
+- 本次按用户“push 代码到 v0.0.4”执行版本提交与推送，不额外生成 tag。
+- 编译、烧录、运行测试：未执行/未验证。
+- 本次版本按 PATCH 递增：`0.0.3` -> `0.0.4`。

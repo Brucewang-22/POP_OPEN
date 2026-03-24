@@ -24,9 +24,9 @@ def bytes_to_c_array(data: bytes, width: int = 12) -> str:
     return "\n".join(lines)
 
 
-def generate_group(group_name: str, jpg_files: list[Path]) -> None:
+def generate_group(group_name: str, out_dir: Path, image_files: list[Path]) -> None:
     symbol_base = sanitize_symbol(group_name)
-    out_dir = jpg_files[0].parent
+    symbol_ns = sanitize_symbol(f"{out_dir.parent.name}_{out_dir.name}")
     out_h = out_dir / f"{symbol_base}_lcd_assets.h"
     out_c = out_dir / f"{symbol_base}_lcd_assets.c"
     guard = f"{symbol_base.upper()}_LCD_ASSETS_H"
@@ -50,9 +50,9 @@ def generate_group(group_name: str, jpg_files: list[Path]) -> None:
         "",
     ]
     entries = []
-    for path in sorted(jpg_files):
+    for path in sorted(image_files):
         data = path.read_bytes()
-        sym = f"g_{symbol_base}_asset_{sanitize_symbol(path.name)}"
+        sym = f"g_{symbol_ns}_asset_{sanitize_symbol(path.name)}"
         c_lines.append(f"static const uint8_t {sym}[] = {{")
         c_lines.append(bytes_to_c_array(data))
         c_lines.append("};")
@@ -70,31 +70,31 @@ def generate_group(group_name: str, jpg_files: list[Path]) -> None:
     )
     c_lines.append("")
     out_c.write_text("\n".join(c_lines), encoding="utf-8")
-    print(f"[lcd-assets] generated {out_h} and {out_c} ({len(jpg_files)} frames)")
+    print(f"[lcd-assets] generated {out_h} and {out_c} ({len(image_files)} frames)")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate embedded LCD JPG asset C files by eye group")
+    parser = argparse.ArgumentParser(description="Generate embedded LCD image asset C files by eye group")
     parser.add_argument("--root", required=True)
     args = parser.parse_args()
 
     root = Path(args.root)
-    groups: dict[str, list[Path]] = {}
-
-    for jpg in sorted(root.glob("*/*/*.jpg")):
-        if not jpg.is_file():
+    groups: dict[tuple[str, str], list[Path]] = {}
+    for image in sorted(root.glob("*/*/*.jpg")):
+        if not image.is_file():
             continue
-        if len(jpg.parts) < 3:
+        if len(image.parts) < 3:
             continue
-        group_name = jpg.parent.parent.name
-        groups.setdefault(group_name, []).append(jpg)
+        group_name = f"{image.parent.parent.name}_{image.parent.name}"
+        group_dir = str(image.parent)
+        groups.setdefault((group_name, group_dir), []).append(image)
 
     if not groups:
         print("[lcd-assets] no jpg files found")
         return 0
 
-    for group_name, files in sorted(groups.items()):
-        generate_group(group_name, files)
+    for (group_name, group_dir), files in sorted(groups.items()):
+        generate_group(group_name, Path(group_dir), files)
 
     return 0
 

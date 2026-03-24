@@ -12,8 +12,41 @@ get_filename_component(APP_NAME ${APP_PATH} NAME)
 set(APP_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${APP_GEN_DIR})
 
+set(HW_THRESHOLD_YAML ${APP_PATH}/src/interactive/yaml/input.yaml)
+set(HW_THRESHOLD_GEN_PY ${APP_PATH}/src/interactive/python/gen_input_thresholds.py)
+set(HW_THRESHOLD_GEN_H ${APP_GEN_DIR}/hardware_thresholds_config.h)
+add_custom_command(
+    OUTPUT ${HW_THRESHOLD_GEN_H}
+    COMMAND python3 ${HW_THRESHOLD_GEN_PY} --input ${HW_THRESHOLD_YAML} --output ${HW_THRESHOLD_GEN_H}
+    DEPENDS ${HW_THRESHOLD_GEN_PY} ${HW_THRESHOLD_YAML}
+    COMMENT "Generating input threshold config from interactive/yaml/input.yaml"
+    VERBATIM
+)
+add_custom_target(hardware_threshold_config_gen DEPENDS ${HW_THRESHOLD_GEN_H})
+
+set(OUT_MODE_YAML ${APP_PATH}/src/interactive/yaml/output.yaml)
+set(OUT_MODE_GEN_PY ${APP_PATH}/src/interactive/python/gen_output_modes.py)
+set(OUT_MODE_GEN_H ${APP_GEN_DIR}/output_mode_config.h)
+add_custom_command(
+    OUTPUT ${OUT_MODE_GEN_H}
+    COMMAND python3 ${OUT_MODE_GEN_PY} --input ${OUT_MODE_YAML} --output ${OUT_MODE_GEN_H}
+    DEPENDS ${OUT_MODE_GEN_PY} ${OUT_MODE_YAML}
+    COMMENT "Generating output mode config from interactive/yaml/output.yaml"
+    VERBATIM
+)
+add_custom_target(output_mode_config_gen DEPENDS ${OUT_MODE_GEN_H})
+
 # APP_SRCS
 aux_source_directory(${APP_PATH}/src APP_SRCS)
+aux_source_directory(${APP_PATH}/src/interactive/hal/src INTERACTIVE_SRCS)
+aux_source_directory(${APP_PATH}/src/interactive/behavior/src INTERACTIVE_BEHAVIOR_SRCS)
+list(APPEND INTERACTIVE_SRCS
+    ${APP_PATH}/src/interactive/hal/src/hardware_abstraction.c
+    ${APP_PATH}/src/interactive/hal/src/input_trigger_layer.c
+)
+list(REMOVE_DUPLICATES INTERACTIVE_SRCS)
+list(APPEND APP_SRCS ${INTERACTIVE_SRCS})
+list(APPEND APP_SRCS ${INTERACTIVE_BEHAVIOR_SRCS})
 
 # hardware/imu (MPU6050 + Mahony AHRS)
 if (CONFIG_ENABLE_HARDWARE_IMU STREQUAL "y")
@@ -52,7 +85,9 @@ if (CONFIG_ENABLE_COMP_AI_AUDIO STREQUAL "y")
 endif()
 
 # local assets: lcd jpg frames and audio mp3 clips (embedded into firmware)
-file(GLOB_RECURSE LCD_TEST_FRAME_FILES ${APP_PATH}/src/hardware/lcd/display_lib/*/*/*.jpg)
+file(GLOB_RECURSE LCD_TEST_FRAME_FILES
+    ${APP_PATH}/src/hardware/lcd/display_lib/*/*/*.jpg
+)
 set(LCD_ASSET_GEN_PY ${APP_PATH}/src/hardware/lcd/display_lib/gen_lcd_arrays.py)
 set(LCD_ASSET_OUTPUTS)
 set(LCD_ASSET_INC_DIRS ${APP_PATH}/src/hardware/lcd/display_lib)
@@ -60,9 +95,10 @@ foreach(LCD_FILE ${LCD_TEST_FRAME_FILES})
     get_filename_component(LCD_DIR ${LCD_FILE} DIRECTORY)
     get_filename_component(LCD_GROUP_DIR ${LCD_DIR} DIRECTORY)
     get_filename_component(LCD_GROUP_NAME ${LCD_GROUP_DIR} NAME)
+    get_filename_component(LCD_SET_NAME ${LCD_DIR} NAME)
     list(APPEND LCD_ASSET_OUTPUTS
-        ${LCD_DIR}/${LCD_GROUP_NAME}_lcd_assets.c
-        ${LCD_DIR}/${LCD_GROUP_NAME}_lcd_assets.h
+        ${LCD_DIR}/${LCD_GROUP_NAME}_${LCD_SET_NAME}_lcd_assets.c
+        ${LCD_DIR}/${LCD_GROUP_NAME}_${LCD_SET_NAME}_lcd_assets.h
     )
     list(APPEND LCD_ASSET_INC_DIRS ${LCD_DIR})
 endforeach()
@@ -112,6 +148,14 @@ endforeach()
 
 set(APP_INC
             ${APP_PATH}/include
+            ${APP_PATH}/src/interactive/hal/include
+            ${APP_PATH}/src/interactive/behavior/include
+            ${APP_PATH}/src/hardware/imu
+            ${APP_PATH}/src/hardware/lcd
+            ${APP_PATH}/src/hardware/moto
+            ${APP_PATH}/src/hardware/microphone
+            ${APP_PATH}/src/hardware/touch
+            ${APP_PATH}/src/hardware/audio
 )
 
 # Board public headers (e.g. board_com_api.h)
@@ -151,6 +195,8 @@ list(APPEND APP_INC ${AUDIO_ASSET_INC_DIRS})
 # Target Configure
 ########################################
 add_library(${EXAMPLE_LIB})
+add_dependencies(${EXAMPLE_LIB} hardware_threshold_config_gen)
+add_dependencies(${EXAMPLE_LIB} output_mode_config_gen)
 
 target_sources(${EXAMPLE_LIB}
     PRIVATE
