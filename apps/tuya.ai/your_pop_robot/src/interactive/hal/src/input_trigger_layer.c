@@ -14,10 +14,13 @@
 static const INTERACTIVE_HARDWARE_ABSTRACTION_T *sg_hw = NULL;
 static INPUT_TRIGGER_THRESHOLDS_T sg_thresholds;
 static INPUT_TRIGGER_FLAGS_T sg_flags;
+static INPUT_TRIGGER_TOUCH_DETAIL_T sg_touch_detail;
 static uint8_t sg_imu_motion_hits = 0;
 static uint8_t sg_touch_prev_active = 0;
 static uint8_t sg_touch_event_count = 0;
 static uint64_t sg_touch_window_start_ms = 0;
+static uint8_t sg_touch_prev_mask = 0;
+static uint8_t sg_touch_prev_threshold = 0;
 
 static float __float_abs(float v)
 {
@@ -70,13 +73,18 @@ static uint8_t __eval_touch(void)
     uint8_t active_cnt = 0;
     bool touched = false;
     bool touch_active = false;
+    uint8_t touch_active_mask = 0;
+    uint8_t touch_rising_mask = 0;
     uint64_t now_ms = 0;
     uint64_t elapsed_ms = 0;
+    uint8_t touch_threshold = 0;
 
     if (sg_hw == NULL) {
+        memset(&sg_touch_detail, 0, sizeof(sg_touch_detail));
         return 0;
     }
     if (sg_hw->input.touch_read_channel == NULL) {
+        memset(&sg_touch_detail, 0, sizeof(sg_touch_detail));
         return 0;
     }
 
@@ -86,8 +94,11 @@ static uint8_t __eval_touch(void)
         }
         if (touched) {
             active_cnt++;
+            touch_active_mask |= (uint8_t)(1U << ch);
         }
     }
+    touch_rising_mask = (uint8_t)(touch_active_mask & (uint8_t)(~sg_touch_prev_mask));
+    sg_touch_prev_mask = touch_active_mask;
 
     touch_active = (active_cnt >= sg_thresholds.touch_min_active_channels);
     now_ms = tal_system_get_millisecond();
@@ -122,13 +133,19 @@ static uint8_t __eval_touch(void)
     if (sg_touch_event_count >= sg_thresholds.touch_min_events_in_window) {
         elapsed_ms = now_ms - sg_touch_window_start_ms;
         if (elapsed_ms <= sg_thresholds.touch_event_window_ms) {
-            return 1;
+            touch_threshold = 1;
+        } else {
+            sg_touch_event_count = 0;
+            sg_touch_window_start_ms = 0;
         }
-        sg_touch_event_count = 0;
-        sg_touch_window_start_ms = 0;
     }
 
-    return 0;
+    sg_touch_detail.touch_active_mask = touch_active_mask;
+    sg_touch_detail.touch_rising_mask = touch_rising_mask;
+    sg_touch_detail.touch_threshold = touch_threshold;
+    sg_touch_detail.touch_threshold_rising = (touch_threshold && !sg_touch_prev_threshold) ? 1U : 0U;
+    sg_touch_prev_threshold = touch_threshold;
+    return touch_threshold;
 }
 
 static uint8_t __eval_imu(void)
@@ -196,10 +213,13 @@ OPERATE_RET input_trigger_layer_init(const INTERACTIVE_HARDWARE_ABSTRACTION_T *h
 
     __set_default_thresholds(&sg_thresholds);
     memset(&sg_flags, 0, sizeof(sg_flags));
+    memset(&sg_touch_detail, 0, sizeof(sg_touch_detail));
     sg_imu_motion_hits = 0;
     sg_touch_prev_active = 0;
     sg_touch_event_count = 0;
     sg_touch_window_start_ms = 0;
+    sg_touch_prev_mask = 0;
+    sg_touch_prev_threshold = 0;
     return OPRT_OK;
 }
 
@@ -229,6 +249,9 @@ OPERATE_RET input_trigger_layer_set_thresholds(const INPUT_TRIGGER_THRESHOLDS_T 
     sg_touch_prev_active = 0;
     sg_touch_event_count = 0;
     sg_touch_window_start_ms = 0;
+    sg_touch_prev_mask = 0;
+    sg_touch_prev_threshold = 0;
+    memset(&sg_touch_detail, 0, sizeof(sg_touch_detail));
     return OPRT_OK;
 }
 
@@ -250,5 +273,14 @@ OPERATE_RET input_trigger_layer_get_flags(INPUT_TRIGGER_FLAGS_T *flags)
         return OPRT_INVALID_PARM;
     }
     *flags = sg_flags;
+    return OPRT_OK;
+}
+
+OPERATE_RET input_trigger_layer_get_touch_detail(INPUT_TRIGGER_TOUCH_DETAIL_T *detail)
+{
+    if (detail == NULL) {
+        return OPRT_INVALID_PARM;
+    }
+    *detail = sg_touch_detail;
     return OPRT_OK;
 }

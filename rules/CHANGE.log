@@ -42,12 +42,12 @@
 - apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/{left_eye,right_eye}/{doubt,happy,normal}/...
 - apps/tuya.ai/your_pop_robot/src/hardware/audio/sound_lib/{doubt,happy,normal}/...
 - apps/tuya.ai/your_pop_robot/src/interactive/...
-- apps/tuya.ai/your_pop_robot/src/interactive/HAL/include/hardware_abstraction.h
-- apps/tuya.ai/your_pop_robot/src/interactive/HAL/src/hardware_abstraction.c
-- apps/tuya.ai/your_pop_robot/src/interactive/HAL/include/input_trigger_layer.h
-- apps/tuya.ai/your_pop_robot/src/interactive/HAL/src/input_trigger_layer.c
-- apps/tuya.ai/your_pop_robot/src/interactive/HAL/include/output_hal.h
-- apps/tuya.ai/your_pop_robot/src/interactive/HAL/src/output_hal.c
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/include/hardware_abstraction.h
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/src/hardware_abstraction.c
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/include/input_trigger_layer.h
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/src/input_trigger_layer.c
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/include/output_hal.h
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/src/output_hal.c
 - apps/tuya.ai/your_pop_robot/src/interactive/python/gen_input_thresholds.py
 - apps/tuya.ai/your_pop_robot/src/interactive/python/gen_output_modes.py
 - apps/tuya.ai/your_pop_robot/src/interactive/yaml/input.yaml
@@ -65,3 +65,22 @@
 [Notes]
 - 按用户指令“开始归档”执行日志记录流程；本次未生成新的归档包（tar.gz）与补丁文件（patch）。
 - 本次版本按 PATCH 递增：`0.0.2` -> `0.0.3`。
+
+[Version] 0.0.4
+[Date] 2026-03-24 03:28:19 EDT
+[Scope]
+- apps/tuya.ai/your_pop_robot/CMakeLists.txt
+- apps/tuya.ai/your_pop_robot/config/LIBTECH_POP_T5AI_DECONFIG.config
+- apps/tuya.ai/your_pop_robot/src/tuya_main.c
+- apps/tuya.ai/your_pop_robot/src/hardware/lcd/display_lib/{left_eye,right_eye}/{doubt,happy,normal}/...
+- apps/tuya.ai/your_pop_robot/src/interactive/...
+- rules/CHANGE.log
+[Changes]
+- 记录当前工作区在 `your_pop_robot` 下的整体变更，并按用户要求将代码整理推送到新版本分支 `v0.0.4`。
+- 补充 LCD 资源序列：`left_eye/right_eye` 下 `happy` 与 `normal` 目录已补齐 `001.jpg` 到 `032.jpg`，用于与现有序列资源保持一致。
+- 记录 interactive 目录重构状态：旧路径 `src/interactive/HAL/...` 删除，新路径 `src/interactive/hal/...` 与 `src/interactive/behavior/...` 处于当前版本提交范围内。
+- 记录当前工作区同时包含构建入口、配置文件、主流程与 LCD 资产生成结果等改动，一并归入本次版本提交。
+[Notes]
+- 本次按用户“push 代码到 v0.0.4”执行版本提交与推送，不额外生成 tag。
+- 编译、烧录、运行测试：未执行/未验证。
+- 本次版本按 PATCH 递增：`0.0.3` -> `0.0.4`。

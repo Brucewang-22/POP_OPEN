@@ -32,10 +32,18 @@ typedef struct {
     uint8_t imu;        /* 1: reached threshold, 0: not reached */
 } INPUT_TRIGGER_FLAGS_T;
 
+typedef struct {
+    uint8_t touch_active_mask;       /* bit0/1/2 => touch ch0/1/2 active */
+    uint8_t touch_rising_mask;       /* bit0/1/2 => touch ch0/1/2 rising */
+    uint8_t touch_threshold;         /* same semantic as flags.touch */
+    uint8_t touch_threshold_rising;  /* threshold touch rising edge */
+} INPUT_TRIGGER_TOUCH_DETAIL_T;
+
 OPERATE_RET input_trigger_layer_init(const INTERACTIVE_HARDWARE_ABSTRACTION_T *hardware_abstraction);
 OPERATE_RET input_trigger_layer_set_thresholds(const INPUT_TRIGGER_THRESHOLDS_T *thresholds);
 OPERATE_RET input_trigger_layer_eval(void);
 OPERATE_RET input_trigger_layer_get_flags(INPUT_TRIGGER_FLAGS_T *flags);
+OPERATE_RET input_trigger_layer_get_touch_detail(INPUT_TRIGGER_TOUCH_DETAIL_T *detail);
 
 #ifdef __cplusplus
 }

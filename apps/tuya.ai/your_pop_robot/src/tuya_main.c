@@ -24,6 +24,7 @@
 #include "tal_cli.h"
 #include "hardware_abstraction.h"
 #include "input_trigger_layer.h"
+#include "behavior_pipeline.h"
 
 #if defined(BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD) && (BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD == 1)
 #include "board_com_api.h"
@@ -190,6 +191,8 @@ static void __local_input_trigger_eval_tm_cb(TIMER_ID timer_id, void *arg)
                   (unsigned)flags.microphone, (unsigned)flags.touch, (unsigned)flags.imu);
         sg_input_trigger_last_flags = flags;
     }
+
+    (void)behavior_pipeline_interaction_phase();
 }
 #endif
 
@@ -303,6 +306,11 @@ static OPERATE_RET app_local_hw_init(void)
     tal_sw_timer_create(__local_input_trigger_eval_tm_cb, NULL, &sg_input_trigger_tm);
     tal_sw_timer_start(sg_input_trigger_tm, INPUT_TRIGGER_EVAL_TIME, TAL_TIMER_CYCLE);
 #endif
+
+    rt = behavior_pipeline_init_phase();
+    if (rt != OPRT_OK) {
+        PR_WARN("[LOCAL][BEHAVIOR] init phase failed: %d (optional)", rt);
+    }
 
     PR_NOTICE("[LOCAL] hardware-only init done");
     return OPRT_OK;

@@ -16,11 +16,11 @@ lcd:
 audio:
   # 字段: volume(音量)
   model1:
-    volume: 70
+    volume: 200
   model2:
-    volume: 70
+    volume: 200
   model3:
-    volume: 70
+    volume: 200
 
 moto:
   # 字段: angle_deg(角度±deg), speed_dps(速度), loop(是否循环), hold_torque(是否保持力矩), run_time_ms(运行时长ms)

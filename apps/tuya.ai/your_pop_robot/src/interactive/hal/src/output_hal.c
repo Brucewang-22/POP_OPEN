@@ -12,6 +12,7 @@
 #include "tkl_pwm.h"
 
 #include "ai_audio_player.h"
+#include "svc_ai_player.h"
 #include "tdl_audio_manage.h"
 #include "output_mode_config.h"
 
@@ -114,6 +115,8 @@ static OPERATE_RET __lcd_open(const char *name, TDL_DISP_HANDLE_T *disp, TDL_DIS
     if (rt != OPRT_OK) {
         return rt;
     }
+    /* tdl_disp_dev_open only inits BL pin, it does not turn BL on. */
+    (void)tdl_disp_set_brightness(*disp, 100);
     return OPRT_OK;
 }
 
@@ -258,12 +261,7 @@ static OPERATE_RET __lcd_play_mode(const OUT_LCD_MODE_SET_T *set, const OUT_LCD_
     }
 
 __exit:
-    if (left_disp != NULL) {
-        (void)tdl_disp_dev_close(left_disp);
-    }
-    if (right_disp != NULL) {
-        (void)tdl_disp_dev_close(right_disp);
-    }
+    /* Keep display device opened to avoid backlight deinit right after init-phase playback. */
     if (left_buf != NULL) {
         tal_free(left_buf);
     }
@@ -322,7 +320,10 @@ static OPERATE_RET __audio_play_mode(const OUT_AUDIO_MODE_SET_T *set, const OUT_
     if (rt != OPRT_OK) {
         return rt;
     }
-    (void)ai_audio_player_set_vol(cfg->volume);
+    /* Keep player digital volume and output-consumer volume aligned. */
+    (void)ai_audio_player_set_vol((int)cfg->volume);
+    (void)tuya_ai_player_set_volume(NULL, (int)cfg->volume);
+    PR_NOTICE("[AUDIO] apply volume=%u", (unsigned)cfg->volume);
 
     clip = &set->clips[0];
     rt = ai_audio_play_tts_stream(AI_AUDIO_PLAYER_TTS_START, AI_AUDIO_CODEC_MP3, NULL, 0);

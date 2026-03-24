@@ -9,8 +9,8 @@ microphone:
 touch:
   # 字段: min_active_channels, event_window_ms, min_events_in_window
   min_active_channels: 1
-  event_window_ms: 1000
-  min_events_in_window: 2
+  event_window_ms: 500
+  min_events_in_window: 1
 
 imu:
   # 字段: require_calibrated, accel_norm_min_mps2, accel_norm_max_mps2, motion_accel_delta_min_mps2, motion_gyro_axis_min_dps, motion_min_consecutive_hits

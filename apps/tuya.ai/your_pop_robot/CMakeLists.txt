@@ -38,13 +38,15 @@ add_custom_target(output_mode_config_gen DEPENDS ${OUT_MODE_GEN_H})
 
 # APP_SRCS
 aux_source_directory(${APP_PATH}/src APP_SRCS)
-aux_source_directory(${APP_PATH}/src/interactive/HAL/src INTERACTIVE_SRCS)
+aux_source_directory(${APP_PATH}/src/interactive/hal/src INTERACTIVE_SRCS)
+aux_source_directory(${APP_PATH}/src/interactive/behavior/src INTERACTIVE_BEHAVIOR_SRCS)
 list(APPEND INTERACTIVE_SRCS
-    ${APP_PATH}/src/interactive/HAL/src/hardware_abstraction.c
-    ${APP_PATH}/src/interactive/HAL/src/input_trigger_layer.c
+    ${APP_PATH}/src/interactive/hal/src/hardware_abstraction.c
+    ${APP_PATH}/src/interactive/hal/src/input_trigger_layer.c
 )
 list(REMOVE_DUPLICATES INTERACTIVE_SRCS)
 list(APPEND APP_SRCS ${INTERACTIVE_SRCS})
+list(APPEND APP_SRCS ${INTERACTIVE_BEHAVIOR_SRCS})
 
 # hardware/imu (MPU6050 + Mahony AHRS)
 if (CONFIG_ENABLE_HARDWARE_IMU STREQUAL "y")
@@ -146,7 +148,8 @@ endforeach()
 
 set(APP_INC
             ${APP_PATH}/include
-            ${APP_PATH}/src/interactive/HAL/include
+            ${APP_PATH}/src/interactive/hal/include
+            ${APP_PATH}/src/interactive/behavior/include
             ${APP_PATH}/src/hardware/imu
             ${APP_PATH}/src/hardware/lcd
             ${APP_PATH}/src/hardware/moto
