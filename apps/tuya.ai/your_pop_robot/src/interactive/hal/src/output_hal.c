@@ -198,8 +198,8 @@ static OPERATE_RET __lcd_play_mode(const OUT_LCD_MODE_SET_T *set, const OUT_LCD_
         return OPRT_INVALID_PARM;
     }
 
-    (void)__lcd_open("display", &left_disp, &left_info);
-    (void)__lcd_open("display2", &right_disp, &right_info);
+    (void)__lcd_open("display0", &left_disp, &left_info);
+    (void)__lcd_open("display1", &right_disp, &right_info);
     if (left_disp == NULL && right_disp == NULL) {
         return OPRT_COM_ERROR;
     }

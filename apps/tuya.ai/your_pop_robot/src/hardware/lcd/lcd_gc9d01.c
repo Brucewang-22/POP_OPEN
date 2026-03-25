@@ -10,10 +10,14 @@
 #include "tdd_disp_type.h"
 #include "tdl_display_manage.h"
 
+#if defined(BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD) && (BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD == 1)
+#include "board_com_api.h"
+#endif
+
 #define LCD_GC9D01_WIDTH  160
 #define LCD_GC9D01_HEIGHT 160
-#define LCD_GC9D01_NAME_0 "lcd_gc9d01_0"
-#define LCD_GC9D01_NAME_1 "lcd_gc9d01_1"
+#define LCD_GC9D01_NAME_0 "display0"
+#define LCD_GC9D01_NAME_1 "display1"
 
 typedef struct {
     bool inited;
@@ -49,6 +53,16 @@ static OPERATE_RET __lcd_open_dev(LCD_INSTANCE_E instance, TDL_DISP_HANDLE_T *ha
     *handle = disp_handle;
 
     return OPRT_OK;
+}
+
+static TUYA_GPIO_LEVEL_E __lcd_backlight_active_level(LCD_INSTANCE_E instance)
+{
+#if defined(BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD) && (BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD == 1)
+    return board_lcd_backlight_active_level_get((uint8_t)instance);
+#else
+    (void)instance;
+    return TUYA_GPIO_LEVEL_HIGH;
+#endif
 }
 
 static OPERATE_RET __lcd_fill(LCD_INSTANCE_E instance, uint16_t color)
@@ -123,7 +137,7 @@ OPERATE_RET lcd_gc9d01_init(LCD_INSTANCE_E instance, LCD_GC9D01_CFG_T *cfg)
     } else {
         display_cfg.bl.type = TUYA_DISP_BL_TP_GPIO;
         display_cfg.bl.gpio.pin = cfg->bl_pin;
-        display_cfg.bl.gpio.active_level = TUYA_GPIO_LEVEL_HIGH;
+        display_cfg.bl.gpio.active_level = __lcd_backlight_active_level(instance);
     }
 
     display_cfg.power.pin = TUYA_GPIO_NUM_MAX;
