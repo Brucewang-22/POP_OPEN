@@ -48,6 +48,7 @@ typedef struct {
 
 typedef struct {
     bool inited;
+    bool init_phase_done;
     BEHAVIOR_STATE_E state;
     uint8_t active_rule_id;
     uint64_t cooldown_until_ms;
@@ -58,6 +59,7 @@ typedef struct {
 
 static BEHAVIOR_CONTEXT_T sg_behavior_ctx = {
     .inited = false,
+    .init_phase_done = false,
     .state = BEHAVIOR_STATE_IDLE,
     .active_rule_id = 0,
     .cooldown_until_ms = 0,
@@ -293,6 +295,7 @@ OPERATE_RET behavior_pipeline_init_phase(void)
         return rt;
     }
 
+    sg_behavior_ctx.init_phase_done = true;
     PR_NOTICE("[BEHAVIOR][INIT] combo done: lcd1 + audio1 + moto1");
     return OPRT_OK;
 }
@@ -307,6 +310,9 @@ OPERATE_RET behavior_pipeline_interaction_phase(void)
     __behavior_interaction_init_once();
     if (sg_behavior_ctx.hw == NULL) {
         return OPRT_COM_ERROR;
+    }
+    if (!sg_behavior_ctx.init_phase_done) {
+        return OPRT_OK;
     }
 
     __behavior_collect_inputs(&input);

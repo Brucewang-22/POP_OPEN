@@ -265,9 +265,9 @@ static OPERATE_RET app_local_hw_init(void)
 #if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)
     {
         INTERACTIVE_TOUCH_CHANNEL_CFG_T cfgs[TOUCH_CH_CNT] = {
-            {.gpio_pin = TUYA_GPIO_NUM_26, .active_level = TUYA_GPIO_LEVEL_HIGH, .pull = TUYA_GPIO_PULLDOWN},
-            {.gpio_pin = TUYA_GPIO_NUM_22, .active_level = TUYA_GPIO_LEVEL_HIGH, .pull = TUYA_GPIO_PULLDOWN},
-            {.gpio_pin = TUYA_GPIO_NUM_23, .active_level = TUYA_GPIO_LEVEL_HIGH, .pull = TUYA_GPIO_PULLDOWN},
+            {.gpio_pin = TUYA_GPIO_NUM_26, .active_level = TUYA_GPIO_LEVEL_LOW, .pull = TUYA_GPIO_PULLUP},
+            {.gpio_pin = TUYA_GPIO_NUM_22, .active_level = TUYA_GPIO_LEVEL_LOW, .pull = TUYA_GPIO_PULLUP},
+            {.gpio_pin = TUYA_GPIO_NUM_23, .active_level = TUYA_GPIO_LEVEL_LOW, .pull = TUYA_GPIO_PULLUP},
         };
         bool touch_enabled = true;
 

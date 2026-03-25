@@ -25,20 +25,20 @@ audio:
 moto:
   # 字段: angle_deg(角度±deg), speed_dps(速度), loop(是否循环), hold_torque(是否保持力矩), run_time_ms(运行时长ms)
   model1:
-    angle_deg: 30
+    angle_deg: 10
     speed_dps: 180
     loop: true
     hold_torque: true
-    run_time_ms: 2000
+    run_time_ms: 50
   model2:
-    angle_deg: 30
+    angle_deg: 10
     speed_dps: 180
     loop: true
     hold_torque: true
-    run_time_ms: 2000
+    run_time_ms: 50
   model3:
-    angle_deg: 30
+    angle_deg: 10
     speed_dps: 180
     loop: true
     hold_torque: true
-    run_time_ms: 2000
+    run_time_ms: 50

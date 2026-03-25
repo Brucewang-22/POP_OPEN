@@ -84,3 +84,26 @@
 - 本次按用户“push 代码到 v0.0.4”执行版本提交与推送，不额外生成 tag。
 - 编译、烧录、运行测试：未执行/未验证。
 - 本次版本按 PATCH 递增：`0.0.3` -> `0.0.4`。
+
+[Version] 0.0.5
+[Date] 2026-03-25 04:29:47 EDT
+[Scope]
+- apps/tuya.ai/your_pop_robot/config/LIBTECH_POP_T5AI_DECONFIG.config
+- apps/tuya.ai/your_pop_robot/src/interactive/behavior/src/behavior_pipeline.c
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/src/output_hal.c
+- apps/tuya.ai/your_pop_robot/src/interactive/yaml/output.yaml
+- apps/tuya.ai/your_pop_robot/src/tuya_main.c
+- rules/CHANGE.log
+[Changes]
+- 调整触摸输入极性：`P26/P22/P23` 由高电平触发改为低电平触发，并将默认上下拉改为 `pull-up`，使运行时触摸判定与当前硬件接法一致。
+- 收敛 LCD 行为层时序：在 `behavior_pipeline` 中增加 `init_phase_done` 门控，避免启动默认动画尚未完成时被触摸事件抢跑，导致初始化阶段重复触发 `mode1`。
+- 加强 LCD 输出链路稳定性：为 `output_hal` 增加 LCD 模式互斥锁，补充设备打开失败日志、模式开始/结束日志、左右屏渲染失败日志，并修复 flush semaphore 未释放与 JPEG codec 未 deinit 的资源清理问题。
+- 修正 LCD 打开路径错误处理：`display0/display1` 任一路打开失败后不再继续按成功路径渲染，避免错误状态继续刷帧。
+- 调整电机输出参数：`interactive/yaml/output.yaml` 中三组 `moto model` 的 `angle_deg` 从 `30` 下调为 `10`，`run_time_ms` 从 `2000` 下调为 `500`，用于缩小摆动幅度并缩短动作持续时间。
+- 更新板级开关：`LIBTECH_POP_T5AI_DECONFIG.config` 中将 `CONFIG_ENABLE_HARDWARE_IMU` 关闭，当前归档版本聚焦 LCD / touch / moto 联调路径。
+[Notes]
+- 本次归档记录基于当前 `v0.0.5` 分支工作区补全版本日志，并提交当前未归档改动。
+- 编译：已执行并通过；主固件产物输出成功。
+- OTA 差分打包：宿主机 `GLIBC_2.38` 缺失导致 `diff2ya` 失败，不影响主固件生成。
+- 烧录/上板运行：已部分联调，LCD 启动卡住问题已收敛；其余行为联调结果以实际串口和现象为准。
+- 本次版本按 PATCH 递增：`0.0.4` -> `0.0.5`。

@@ -91,6 +91,7 @@ static const OUT_MOTO_MODE_CFG_T sg_moto_cfg[] = {
 
 static bool sg_output_inited = false;
 static bool sg_audio_ready = false;
+static MUTEX_HANDLE sg_lcd_mutex = NULL;
 
 static void __lcd_flush_done_cb(TDL_DISP_FRAME_BUFF_T *frame_buff)
 {
@@ -105,18 +106,23 @@ static OPERATE_RET __lcd_open(const char *name, TDL_DISP_HANDLE_T *disp, TDL_DIS
     OPERATE_RET rt = OPRT_OK;
     *disp = tdl_disp_find_dev((char *)name);
     if (*disp == NULL) {
+        PR_ERR("[LCD] find dev failed: %s", name);
         return OPRT_COM_ERROR;
     }
     rt = tdl_disp_dev_open(*disp);
     if (rt != OPRT_OK) {
+        PR_ERR("[LCD] open failed: %s rt=%d", name, rt);
         return rt;
     }
     rt = tdl_disp_dev_get_info(*disp, info);
     if (rt != OPRT_OK) {
+        PR_ERR("[LCD] get info failed: %s rt=%d", name, rt);
         return rt;
     }
     /* tdl_disp_dev_open only inits BL pin, it does not turn BL on. */
     (void)tdl_disp_set_brightness(*disp, 100);
+    PR_NOTICE("[LCD] open ok: %s %ux%u swap=%u", name, (unsigned)info->width, (unsigned)info->height,
+              (unsigned)info->is_swap);
     return OPRT_OK;
 }
 
@@ -198,8 +204,14 @@ static OPERATE_RET __lcd_play_mode(const OUT_LCD_MODE_SET_T *set, const OUT_LCD_
         return OPRT_INVALID_PARM;
     }
 
-    (void)__lcd_open("display0", &left_disp, &left_info);
-    (void)__lcd_open("display1", &right_disp, &right_info);
+    rt = __lcd_open("display0", &left_disp, &left_info);
+    if (rt != OPRT_OK) {
+        left_disp = NULL;
+    }
+    rt = __lcd_open("display1", &right_disp, &right_info);
+    if (rt != OPRT_OK) {
+        right_disp = NULL;
+    }
     if (left_disp == NULL && right_disp == NULL) {
         return OPRT_COM_ERROR;
     }
@@ -234,13 +246,17 @@ static OPERATE_RET __lcd_play_mode(const OUT_LCD_MODE_SET_T *set, const OUT_LCD_
     while (1) {
         if (left_disp != NULL && set->left_count > 0) {
             const LOCAL_LCD_FRAME_T *f = &set->left_frames[i % set->left_count];
-            if (__lcd_render_frame(left_disp, &left_info, left_buf, OUT_LCD_BUF_MAX_SIZE, left_sem, f) != OPRT_OK) {
+            rt = __lcd_render_frame(left_disp, &left_info, left_buf, OUT_LCD_BUF_MAX_SIZE, left_sem, f);
+            if (rt != OPRT_OK) {
+                PR_WARN("[LCD] left render failed: frame=%u rt=%d", (unsigned)i, rt);
                 fail_cnt++;
             }
         }
         if (right_disp != NULL && set->right_count > 0) {
             const LOCAL_LCD_FRAME_T *f = &set->right_frames[i % set->right_count];
-            if (__lcd_render_frame(right_disp, &right_info, right_buf, OUT_LCD_BUF_MAX_SIZE, right_sem, f) != OPRT_OK) {
+            rt = __lcd_render_frame(right_disp, &right_info, right_buf, OUT_LCD_BUF_MAX_SIZE, right_sem, f);
+            if (rt != OPRT_OK) {
+                PR_WARN("[LCD] right render failed: frame=%u rt=%d", (unsigned)i, rt);
                 fail_cnt++;
             }
         }
@@ -260,7 +276,17 @@ static OPERATE_RET __lcd_play_mode(const OUT_LCD_MODE_SET_T *set, const OUT_LCD_
         rt = OPRT_NOT_SUPPORTED;
     }
 
+    PR_NOTICE("[LCD] mode done: frames=%u fail=%u rt=%d", (unsigned)i, (unsigned)fail_cnt, rt);
+
 __exit:
+    if (left_sem != NULL) {
+        (void)tal_semaphore_release(left_sem);
+    }
+    if (right_sem != NULL) {
+        (void)tal_semaphore_release(right_sem);
+    }
+    (void)tkl_jpeg_codec_deinit();
+
     /* Keep display device opened to avoid backlight deinit right after init-phase playback. */
     if (left_buf != NULL) {
         tal_free(left_buf);
@@ -393,9 +419,17 @@ static void __moto_set_angle_mask(uint8_t mode, int16_t angle_deg)
 
 OPERATE_RET output_hal_init(void)
 {
+    OPERATE_RET rt = OPRT_OK;
+
     if (sg_output_inited) {
         return OPRT_OK;
     }
+
+    rt = tal_mutex_create_init(&sg_lcd_mutex);
+    if (rt != OPRT_OK) {
+        return rt;
+    }
+
     (void)moto_bringup_init();
     sg_output_inited = true;
     return OPRT_OK;
@@ -405,6 +439,7 @@ OPERATE_RET output_hal_set_lcd_mode(OUTPUT_MODE_E mode)
 {
     OUT_LCD_MODE_SET_T set = {0};
     const OUT_LCD_MODE_CFG_T *cfg = NULL;
+    OPERATE_RET rt = OPRT_OK;
 
     switch (mode) {
     case OUTPUT_MODE_1:
@@ -430,8 +465,26 @@ OPERATE_RET output_hal_set_lcd_mode(OUTPUT_MODE_E mode)
     }
 
     cfg = &sg_lcd_cfg[(uint8_t)mode - 1U];
-    (void)output_hal_init();
-    return __lcd_play_mode(&set, cfg);
+    rt = output_hal_init();
+    if (rt != OPRT_OK) {
+        return rt;
+    }
+    if (sg_lcd_mutex == NULL) {
+        return OPRT_COM_ERROR;
+    }
+
+    PR_NOTICE("[LCD] mode start: mode=%u loop=%u fps=%u", (unsigned)mode,
+              (unsigned)cfg->loop_time_ms, (unsigned)cfg->fps);
+
+    rt = tal_mutex_lock(sg_lcd_mutex);
+    if (rt != OPRT_OK) {
+        PR_ERR("[LCD] mutex lock failed: mode=%u rt=%d", (unsigned)mode, rt);
+        return rt;
+    }
+
+    rt = __lcd_play_mode(&set, cfg);
+    (void)tal_mutex_unlock(sg_lcd_mutex);
+    return rt;
 }
 
 OPERATE_RET output_hal_set_audio_mode(OUTPUT_MODE_E mode)
