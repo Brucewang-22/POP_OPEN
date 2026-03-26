@@ -1,6 +1,6 @@
 /**
  * @file moto_bringup.h
- * @brief Servo bring-up: smooth boot-home for POP robot motors.
+ * @brief Servo bring-up: zero-based boot-home for POP robot motors.
  */
 #pragma once
 
@@ -24,6 +24,22 @@ OPERATE_RET moto_bringup_set_home_speed(uint16_t speed_dps);
  * @brief Set home angle of one servo channel (index: 0->PWM2, 1->PWM3).
  */
 OPERATE_RET moto_bringup_set_home_angle(uint8_t ch_index, int16_t angle_deg);
+
+/**
+ * @brief Get home angle of one servo channel (index: 0->PWM2, 1->PWM3).
+ */
+OPERATE_RET moto_bringup_get_home_angle(uint8_t ch_index, int16_t *angle_deg);
+
+/**
+ * @brief Get symmetric mechanical limit around home angle of one channel.
+ */
+OPERATE_RET moto_bringup_get_limit_deg(uint8_t ch_index, int16_t *limit_deg);
+
+/**
+ * @brief Resolve one channel logical offset around home into servo target angle.
+ */
+OPERATE_RET moto_bringup_resolve_target_angle(uint8_t ch_index, int16_t logical_offset_deg,
+                                              int16_t *angle_deg);
 
 #ifdef __cplusplus
 }

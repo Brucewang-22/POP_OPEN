@@ -26,6 +26,10 @@ config ENABLE_HARDWARE_TOUCH
     bool "enable external touch bringup monitor"
     default y
 
+config ENABLE_HARDWARE_BUTTON
+    bool "enable P36/P37 long-press power button"
+    default y
+
 endmenu
 
 rsource "../ai_components/Kconfig"
