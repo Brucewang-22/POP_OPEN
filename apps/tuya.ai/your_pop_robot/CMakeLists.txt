@@ -78,6 +78,12 @@ if (CONFIG_ENABLE_HARDWARE_TOUCH STREQUAL "y")
     list(APPEND APP_SRCS ${TOUCH_SRCS})
 endif()
 
+# hardware/button (P36 switch + P37 long-press button)
+if (CONFIG_ENABLE_HARDWARE_BUTTON STREQUAL "y")
+    aux_source_directory(${APP_PATH}/src/hardware/button BUTTON_SRCS)
+    list(APPEND APP_SRCS ${BUTTON_SRCS})
+endif()
+
 # hardware/audio (local speaker playback bring-up)
 if (CONFIG_ENABLE_COMP_AI_AUDIO STREQUAL "y")
     aux_source_directory(${APP_PATH}/src/hardware/audio AUDIO_SRCS)
@@ -155,6 +161,7 @@ set(APP_INC
             ${APP_PATH}/src/hardware/moto
             ${APP_PATH}/src/hardware/microphone
             ${APP_PATH}/src/hardware/touch
+            ${APP_PATH}/src/hardware/button
             ${APP_PATH}/src/hardware/audio
 )
 
@@ -181,6 +188,10 @@ endif()
 
 if (CONFIG_ENABLE_HARDWARE_TOUCH STREQUAL "y")
     list(APPEND APP_INC ${APP_PATH}/src/hardware/touch)
+endif()
+
+if (CONFIG_ENABLE_HARDWARE_BUTTON STREQUAL "y")
+    list(APPEND APP_INC ${APP_PATH}/src/hardware/button)
 endif()
 
 if (CONFIG_ENABLE_COMP_AI_AUDIO STREQUAL "y")

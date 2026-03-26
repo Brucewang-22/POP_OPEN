@@ -91,6 +91,7 @@ static const OUT_MOTO_MODE_CFG_T sg_moto_cfg[] = {
 
 static bool sg_output_inited = false;
 static bool sg_audio_ready = false;
+static bool sg_moto_ready = false;
 static MUTEX_HANDLE sg_lcd_mutex = NULL;
 static int16_t sg_moto_logical_offset[2] = {0, 0};
 
@@ -513,10 +514,31 @@ OPERATE_RET output_hal_init(void)
         return rt;
     }
 
-    (void)moto_bringup_init();
+    sg_output_inited = true;
+    return OPRT_OK;
+}
+
+static OPERATE_RET __output_hal_moto_init(void)
+{
+    OPERATE_RET rt = OPRT_OK;
+
+    if (sg_moto_ready) {
+        return OPRT_OK;
+    }
+
+    rt = output_hal_init();
+    if (rt != OPRT_OK) {
+        return rt;
+    }
+
+    rt = moto_bringup_init();
+    if (rt != OPRT_OK) {
+        return rt;
+    }
+
     sg_moto_logical_offset[0] = 0;
     sg_moto_logical_offset[1] = 0;
-    sg_output_inited = true;
+    sg_moto_ready = true;
     return OPRT_OK;
 }
 
@@ -605,12 +627,16 @@ OPERATE_RET output_hal_set_moto_mode(OUTPUT_MODE_E mode)
     uint64_t start_ms = 0;
     int16_t angle_pos = 0;
     int16_t angle_neg = 0;
+    OPERATE_RET rt = OPRT_OK;
 
     if (mode < OUTPUT_MODE_1 || mode > OUTPUT_MODE_3) {
         return OPRT_INVALID_PARM;
     }
 
-    (void)output_hal_init();
+    rt = __output_hal_moto_init();
+    if (rt != OPRT_OK) {
+        return rt;
+    }
     cfg = &sg_moto_cfg[(uint8_t)mode - 1U];
     if (cfg->angle_deg > 90U || cfg->speed_dps == 0U) {
         return OPRT_INVALID_PARM;

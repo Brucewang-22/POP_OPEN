@@ -108,3 +108,31 @@
 - OTA 差分打包：宿主机 `GLIBC_2.38` 缺失导致 `diff2ya` 失败，不影响主固件生成。
 - 烧录/上板运行：已部分联调，LCD 启动卡住问题已收敛；其余行为联调结果以实际串口和现象为准。
 - 本次版本按 PATCH 递增：`0.0.4` -> `0.0.5`。
+
+[Version] 0.0.6
+[Date] 2026-03-26 02:05:00 EDT
+[Scope]
+- apps/tuya.ai/your_pop_robot/CMakeLists.txt
+- apps/tuya.ai/your_pop_robot/Kconfig
+- apps/tuya.ai/your_pop_robot/src/hardware/button/button_power.c
+- apps/tuya.ai/your_pop_robot/src/hardware/button/button_power.h
+- apps/tuya.ai/your_pop_robot/src/interactive/hal/src/output_hal.c
+- apps/tuya.ai/your_pop_robot/src/interactive/yaml/output.yaml
+- apps/tuya.ai/your_pop_robot/src/tuya_main.c
+- rules/CHANGE.log
+[Changes]
+- 新增硬件按钮电源保持模块 `hardware/button`，实现 `P37` 按键输入与 `P36` 电源保持输出联动，按原理图收敛为“按下低电平识别、`P36` 高电平保持上电”的逻辑。
+- 拆分按钮长按时长：开机长按调整为 `1500ms`，关机长按调整为 `500ms`，解决冷启动保持窗口不足而运行态关机又希望快速响应的问题。
+- 将按钮保持链前移到 `user_main()` 最早阶段：增加早期 `P36` 强拉高、启动期按钮 bootstrap 与最小轮询逻辑，避免后续大模块初始化打断冷启动自保持。
+- 采用分阶段恢复方式重建启动路径，逐步恢复 `board_register_hardware`、LCD、MOTO，最终恢复 `touch / imu / mic / input_trigger / behavior` 全链路，并将阶段开关收敛到 `BUTTON_STARTUP_RECOVERY_STAGE = 5`。
+- 规范化输出 HAL 职责边界：`output_hal_init()` 不再隐式执行 `moto_bringup_init()`，改为仅在显式调用 `output_hal_set_moto_mode()` 时初始化电机，消除“开屏顺带触发舵机归零”的隐式耦合。
+- 新增启动组合初始化任务：上电后由 `tuya_main.c` 并行拉起 `lcd mode1 + audio mode1 + moto mode1`，使屏幕、扬声器、电机进入同一启动阶段初始化，而非串行错峰启动。
+- 保留并整合之前的电机零位与限位模型：`PWM2`/`PWM3` 继续通过 `moto_bringup_resolve_target_angle()` 做统一角度解析与限幅，`output.yaml` 的电机参数调整仍受底层限位保护。
+- 在 `output.yaml` 中保留当前联调用的电机循环参数版本，作为触摸交互期间电机循环摆动的编译期配置入口。
+[Notes]
+- 归档依据：仓库中未找到用户提到的 `rules/AGENT_DEV.yaml`，本次按现有 [VERSIONING_README.md] 规则执行日志归档。
+- 编译：已多次执行完整构建并通过；主固件产物输出成功。
+- OTA 差分打包：宿主机 `GLIBC_2.38` 缺失导致 `diff2ya` 失败，不影响主固件生成。
+- 烧录：构建脚本自动进入烧录阶段，但当前环境仍停在 `Waiting Reset ...`，因此烧录完成状态未验证。
+- 上板联调：已由用户反馈确认按钮开关逻辑、上电组合初始化逻辑恢复正常；触摸连续循环摆动方案仍处于待改阶段。
+- 本次版本按 PATCH 递增：`0.0.5` -> `0.0.6`。

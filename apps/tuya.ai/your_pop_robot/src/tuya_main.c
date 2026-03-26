@@ -23,8 +23,12 @@
 #include "tkl_gpio.h"
 #include "tal_cli.h"
 #include "hardware_abstraction.h"
+#include "output_hal.h"
 #include "input_trigger_layer.h"
 #include "behavior_pipeline.h"
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#include "button_power.h"
+#endif
 
 #if defined(BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD) && (BOARD_CHOICE_LIBTECH_POP_T5AI_BOARD == 1)
 #include "board_com_api.h"
@@ -51,6 +55,12 @@ static OPERATE_RET board_register_hardware(void)
 #define TOUCH_POLL_TIME        (50)
 #define TOUCH_CH_CNT           (3)
 #endif
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#define BUTTON_POLL_TIME       (10)
+#define BUTTON_BOOT_POLL_TIME  (10)
+#define BUTTON_POWER_SWITCH_PIN TUYA_GPIO_NUM_36
+#define BUTTON_STARTUP_RECOVERY_STAGE 5
+#endif
 #if ((defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)) || \
      (defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)) ||          \
      (defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)))
@@ -66,13 +76,75 @@ static TIMER_ID sg_imu_status_tm;
 #if defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)
 static TIMER_ID sg_mic_status_tm;
 #endif
-#if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)
+#if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1) && \
+    (!defined(ENABLE_HARDWARE_BUTTON) || (ENABLE_HARDWARE_BUTTON != 1) || (BUTTON_STARTUP_RECOVERY_STAGE >= 5))
 static TIMER_ID sg_touch_poll_tm;
 static uint8_t sg_touch_last_mask;
 #endif
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+static TIMER_ID sg_button_poll_tm;
+static bool sg_button_last_power_enabled;
+static bool sg_button_inited;
+
+static void __local_startup_lcd_task(void *arg)
+{
+    (void)arg;
+    if (output_hal_set_lcd_mode(OUTPUT_MODE_1) != OPRT_OK) {
+        PR_WARN("[LOCAL][STARTUP] lcd mode1 failed");
+    }
+}
+
+static void __local_startup_audio_task(void *arg)
+{
+    (void)arg;
+    if (output_hal_set_audio_mode(OUTPUT_MODE_1) != OPRT_OK) {
+        PR_WARN("[LOCAL][STARTUP] audio mode1 failed");
+    }
+}
+
+static void __local_startup_moto_task(void *arg)
+{
+    (void)arg;
+    if (output_hal_set_moto_mode(OUTPUT_MODE_1) != OPRT_OK) {
+        PR_WARN("[LOCAL][STARTUP] moto mode1 failed");
+    }
+}
+
+static OPERATE_RET __local_startup_combo_init(void)
+{
+    THREAD_HANDLE th = NULL;
+    THREAD_CFG_T cfg = {0};
+    OPERATE_RET rt = OPRT_OK;
+
+    cfg.stackDepth = 4096;
+    cfg.priority = THREAD_PRIO_2;
+
+    cfg.thrdname = "st_lcd";
+    rt = tal_thread_create_and_start(&th, NULL, NULL, __local_startup_lcd_task, NULL, &cfg);
+    if (rt != OPRT_OK) {
+        return rt;
+    }
+
+    cfg.thrdname = "st_aud";
+    rt = tal_thread_create_and_start(&th, NULL, NULL, __local_startup_audio_task, NULL, &cfg);
+    if (rt != OPRT_OK) {
+        return rt;
+    }
+
+    cfg.thrdname = "st_moto";
+    rt = tal_thread_create_and_start(&th, NULL, NULL, __local_startup_moto_task, NULL, &cfg);
+    if (rt != OPRT_OK) {
+        return rt;
+    }
+
+    PR_NOTICE("[LOCAL][STARTUP] combo init launched: lcd1 + audio1 + moto1");
+    return OPRT_OK;
+}
+#endif
 #if ((defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)) || \
      (defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)) ||          \
-     (defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)))
+     (defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1))) &&              \
+    (!defined(ENABLE_HARDWARE_BUTTON) || (ENABLE_HARDWARE_BUTTON != 1) || (BUTTON_STARTUP_RECOVERY_STAGE >= 5))
 static TIMER_ID sg_input_trigger_tm;
 static INPUT_TRIGGER_FLAGS_T sg_input_trigger_last_flags;
 #endif
@@ -109,7 +181,8 @@ static void __local_mic_status_tm_cb(TIMER_ID timer_id, void *arg)
 }
 #endif
 
-#if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)
+#if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1) && \
+    (!defined(ENABLE_HARDWARE_BUTTON) || (ENABLE_HARDWARE_BUTTON != 1) || (BUTTON_STARTUP_RECOVERY_STAGE >= 5))
 static void __local_touch_poll_tm_cb(TIMER_ID timer_id, void *arg)
 {
     uint8_t mask = 0;
@@ -169,7 +242,8 @@ static void __local_imu_status_tm_cb(TIMER_ID timer_id, void *arg)
 
 #if ((defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)) || \
      (defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)) ||          \
-     (defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)))
+     (defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1))) &&              \
+    (!defined(ENABLE_HARDWARE_BUTTON) || (ENABLE_HARDWARE_BUTTON != 1) || (BUTTON_STARTUP_RECOVERY_STAGE >= 5))
 static void __local_input_trigger_eval_tm_cb(TIMER_ID timer_id, void *arg)
 {
     INPUT_TRIGGER_FLAGS_T flags = {0};
@@ -196,7 +270,116 @@ static void __local_input_trigger_eval_tm_cb(TIMER_ID timer_id, void *arg)
 }
 #endif
 
-#if defined(ENABLE_HARDWARE_LCD) && (ENABLE_HARDWARE_LCD == 1)
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+static void __local_force_power_hold(void)
+{
+    TUYA_GPIO_BASE_CFG_T switch_cfg = {0};
+
+    switch_cfg.direct = TUYA_GPIO_OUTPUT;
+    switch_cfg.mode = TUYA_GPIO_PUSH_PULL;
+    switch_cfg.level = TUYA_GPIO_LEVEL_HIGH;
+
+    if (tkl_gpio_init(BUTTON_POWER_SWITCH_PIN, &switch_cfg) != OPRT_OK) {
+        PR_WARN("[LOCAL][BUTTON] force hold init failed on P36");
+        return;
+    }
+    if (tkl_gpio_write(BUTTON_POWER_SWITCH_PIN, TUYA_GPIO_LEVEL_HIGH) != OPRT_OK) {
+        PR_WARN("[LOCAL][BUTTON] force hold write failed on P36");
+        return;
+    }
+
+    PR_NOTICE("[LOCAL][BUTTON] force hold active on P36");
+}
+
+static void __local_button_bootstrap(void)
+{
+    BUTTON_POWER_STATUS_T status = {0};
+    uint32_t wait_ms = 0;
+    OPERATE_RET rt = OPRT_OK;
+
+    if (sg_button_inited) {
+        return;
+    }
+
+    rt = button_power_init();
+    if (rt != OPRT_OK) {
+        PR_WARN("[LOCAL][BUTTON] early init failed: %d (optional)", rt);
+        return;
+    }
+
+    sg_button_inited = true;
+
+    while (wait_ms < 2500U) {
+        if (button_power_poll(BUTTON_BOOT_POLL_TIME) != OPRT_OK) {
+            break;
+        }
+        if (button_power_get_status(&status) != OPRT_OK) {
+            break;
+        }
+        sg_button_last_power_enabled = status.power_enabled;
+        if (status.power_enabled || !status.button_pressed) {
+            break;
+        }
+        tal_system_sleep(BUTTON_BOOT_POLL_TIME);
+        wait_ms += BUTTON_BOOT_POLL_TIME;
+    }
+
+    PR_NOTICE("[LOCAL][BUTTON] early bootstrap done, power=%u pressed=%u hold_ms=%u",
+              (unsigned)(sg_button_last_power_enabled ? 1U : 0U),
+              (unsigned)(status.button_pressed ? 1U : 0U),
+              (unsigned)status.press_duration_ms);
+}
+
+static void __local_button_poll_tm_cb(TIMER_ID timer_id, void *arg)
+{
+    BUTTON_POWER_STATUS_T status = {0};
+
+    (void)timer_id;
+    (void)arg;
+
+    if (button_power_poll(BUTTON_POLL_TIME) != OPRT_OK) {
+        return;
+    }
+    if (button_power_get_status(&status) != OPRT_OK) {
+        return;
+    }
+
+    if (status.power_enabled != sg_button_last_power_enabled) {
+        PR_NOTICE("[BUTTON] power changed: enabled=%u pressed=%u hold_ms=%u",
+                  (unsigned)(status.power_enabled ? 1U : 0U),
+                  (unsigned)(status.button_pressed ? 1U : 0U),
+                  (unsigned)status.press_duration_ms);
+        sg_button_last_power_enabled = status.power_enabled;
+    }
+}
+
+static OPERATE_RET __local_button_minimal_init(void)
+{
+    BUTTON_POWER_STATUS_T status = {0};
+    OPERATE_RET rt = OPRT_OK;
+
+    if (!sg_button_inited) {
+        rt = button_power_init();
+        if (rt != OPRT_OK) {
+            PR_WARN("[LOCAL][BUTTON] minimal init failed: %d", rt);
+            return rt;
+        }
+        sg_button_inited = true;
+    }
+
+    tal_sw_timer_create(__local_button_poll_tm_cb, NULL, &sg_button_poll_tm);
+    tal_sw_timer_start(sg_button_poll_tm, BUTTON_POLL_TIME, TAL_TIMER_CYCLE);
+    if (button_power_get_status(&status) == OPRT_OK) {
+        sg_button_last_power_enabled = status.power_enabled;
+    }
+
+    PR_NOTICE("[LOCAL][BUTTON] minimal verify mode active, only P36/P37 kept");
+    return OPRT_OK;
+}
+#endif
+
+#if defined(ENABLE_HARDWARE_LCD) && (ENABLE_HARDWARE_LCD == 1) && \
+    (!defined(ENABLE_HARDWARE_BUTTON) || (ENABLE_HARDWARE_BUTTON != 1) || ((BUTTON_STARTUP_RECOVERY_STAGE >= 3) && (BUTTON_STARTUP_RECOVERY_STAGE < 4)))
 static OPERATE_RET __local_lcd_basic_init(void)
 {
     OPERATE_RET left_rt = OPRT_OK;
@@ -223,9 +406,17 @@ static OPERATE_RET app_local_hw_init(void)
 
     PR_NOTICE("[LOCAL] hardware-only init start");
 
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#if (BUTTON_STARTUP_RECOVERY_STAGE <= 1)
+    PR_NOTICE("[LOCAL] staged recovery: stop before app_local_hw_init heavy modules");
+    return OPRT_OK;
+#endif
+#endif
+
 #if ((defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)) || \
      (defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)) ||          \
-     (defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)))
+     (defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1))) &&              \
+    (!defined(ENABLE_HARDWARE_BUTTON) || (ENABLE_HARDWARE_BUTTON != 1) || (BUTTON_STARTUP_RECOVERY_STAGE >= 5))
     TUYA_CALL_ERR_LOG(input_trigger_layer_init(sg_hw_abstraction));
     memset(&sg_input_trigger_last_flags, 0, sizeof(sg_input_trigger_last_flags));
 #endif
@@ -234,6 +425,8 @@ static OPERATE_RET app_local_hw_init(void)
     tal_sw_timer_start(sg_printf_heap_tm, PRINTF_FREE_HEAP_TTIME, TAL_TIMER_CYCLE);
 
 #if defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#if (BUTTON_STARTUP_RECOVERY_STAGE >= 5)
     rt = sg_hw_abstraction->input.imu_init();
     if (rt == OPRT_OK) {
         tal_sw_timer_create(__local_imu_poll_tm_cb, NULL, &sg_imu_poll_tm);
@@ -245,15 +438,23 @@ static OPERATE_RET app_local_hw_init(void)
         PR_WARN("[LOCAL][IMU] init failed: %d (optional)", rt);
     }
 #endif
+#endif
+#endif
 
 #if defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#if (BUTTON_STARTUP_RECOVERY_STAGE >= 5)
     TUYA_CALL_ERR_LOG(sg_hw_abstraction->input.microphone_init());
     tal_sw_timer_create(__local_mic_status_tm_cb, NULL, &sg_mic_status_tm);
     tal_sw_timer_start(sg_mic_status_tm, MIC_STATUS_TIME, TAL_TIMER_CYCLE);
     PR_WARN("[LOCAL][MIC] AI pipeline disabled in local mode, mic frames may remain zero");
 #endif
+#endif
+#endif
 
 #if defined(ENABLE_HARDWARE_MOTO) && (ENABLE_HARDWARE_MOTO == 1)
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#if (BUTTON_STARTUP_RECOVERY_STAGE >= 5)
     rt = sg_hw_abstraction->output.moto_init();
     if (rt != OPRT_OK) {
         PR_WARN("[LOCAL][MOTO] init failed: %d (optional)", rt);
@@ -261,8 +462,12 @@ static OPERATE_RET app_local_hw_init(void)
         PR_NOTICE("[LOCAL][MOTO] init ok");
     }
 #endif
+#endif
+#endif
 
 #if defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#if (BUTTON_STARTUP_RECOVERY_STAGE >= 5)
     {
         INTERACTIVE_TOUCH_CHANNEL_CFG_T cfgs[TOUCH_CH_CNT] = {
             {.gpio_pin = TUYA_GPIO_NUM_26, .active_level = TUYA_GPIO_LEVEL_LOW, .pull = TUYA_GPIO_PULLUP},
@@ -288,29 +493,82 @@ static OPERATE_RET app_local_hw_init(void)
         }
     }
 #endif
+#endif
+#endif
+
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+    if (!sg_button_inited) {
+        rt = button_power_init();
+        if (rt == OPRT_OK) {
+            sg_button_inited = true;
+        }
+    }
+
+    if (!sg_button_inited) {
+        PR_WARN("[LOCAL][BUTTON] init failed: %d (optional)", rt);
+    } else {
+        BUTTON_POWER_STATUS_T status = {0};
+
+        tal_sw_timer_create(__local_button_poll_tm_cb, NULL, &sg_button_poll_tm);
+        tal_sw_timer_start(sg_button_poll_tm, BUTTON_POLL_TIME, TAL_TIMER_CYCLE);
+        if (button_power_get_status(&status) == OPRT_OK) {
+            sg_button_last_power_enabled = status.power_enabled;
+        }
+        PR_NOTICE("[LOCAL][BUTTON] init ok, polling %ums on P36/P37", BUTTON_POLL_TIME);
+    }
+#endif
 
 #if defined(ENABLE_COMP_AI_AUDIO) && (ENABLE_COMP_AI_AUDIO == 1)
     PR_NOTICE("[LOCAL][AUDIO] playback test disabled in local init");
 #endif
 
 #if defined(ENABLE_HARDWARE_LCD) && (ENABLE_HARDWARE_LCD == 1)
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#if (BUTTON_STARTUP_RECOVERY_STAGE >= 3) && (BUTTON_STARTUP_RECOVERY_STAGE < 4)
     rt = __local_lcd_basic_init();
     if (rt != OPRT_OK) {
         PR_WARN("[LOCAL][LCD] basic init failed: %d (optional)", rt);
     }
+#if (BUTTON_STARTUP_RECOVERY_STAGE < 4)
+    rt = output_hal_set_lcd_mode(OUTPUT_MODE_1);
+    if (rt != OPRT_OK) {
+        PR_WARN("[LOCAL][LCD] mode1 init failed: %d (optional)", rt);
+    } else {
+        PR_NOTICE("[LOCAL][LCD] mode1 init ok");
+    }
+#endif
+#endif
+#endif
+#endif
+
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#if (BUTTON_STARTUP_RECOVERY_STAGE >= 4)
+    rt = __local_startup_combo_init();
+    if (rt != OPRT_OK) {
+        PR_WARN("[LOCAL][STARTUP] combo init failed: %d (optional)", rt);
+    }
+#endif
 #endif
 
 #if ((defined(ENABLE_HARDWARE_MICROPHONE) && (ENABLE_HARDWARE_MICROPHONE == 1)) || \
      (defined(ENABLE_HARDWARE_TOUCH) && (ENABLE_HARDWARE_TOUCH == 1)) ||          \
      (defined(ENABLE_HARDWARE_IMU) && (ENABLE_HARDWARE_IMU == 1)))
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#if (BUTTON_STARTUP_RECOVERY_STAGE >= 5)
     tal_sw_timer_create(__local_input_trigger_eval_tm_cb, NULL, &sg_input_trigger_tm);
     tal_sw_timer_start(sg_input_trigger_tm, INPUT_TRIGGER_EVAL_TIME, TAL_TIMER_CYCLE);
 #endif
+#endif
+#endif
 
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+#if (BUTTON_STARTUP_RECOVERY_STAGE >= 5)
     rt = behavior_pipeline_init_phase();
     if (rt != OPRT_OK) {
         PR_WARN("[LOCAL][BEHAVIOR] init phase failed: %d (optional)", rt);
     }
+#endif
+#endif
 
     PR_NOTICE("[LOCAL] hardware-only init done");
     return OPRT_OK;
@@ -348,6 +606,15 @@ void user_main(void)
     tal_workq_init();
     tal_time_service_init();
     tal_cli_init();
+
+#if defined(ENABLE_HARDWARE_BUTTON) && (ENABLE_HARDWARE_BUTTON == 1)
+    __local_force_power_hold();
+    __local_button_bootstrap();
+    ret = __local_button_minimal_init();
+    if (ret != OPRT_OK) {
+        PR_ERR("button minimal init failed: %d", ret);
+    }
+#endif
 
     ret = board_register_hardware();
     if (ret != OPRT_OK) {
