@@ -35,9 +35,9 @@ extern const uint32_t g_normal_audio_clip_count;
 #define OUT_LCD_FLUSH_WAIT_MS    200U
 #define OUT_AUDIO_CHUNK_SIZE     2048U
 
-#define OUT_MOTO_CENTER_DEG      90
 #define OUT_MOTO_PWM_DUTY_MIN    250U
 #define OUT_MOTO_PWM_DUTY_MAX    1250U
+#define OUT_MOTO_STEP_PERIOD_MS  20U
 
 typedef struct {
     const LOCAL_LCD_FRAME_T *left_frames;
@@ -92,6 +92,7 @@ static const OUT_MOTO_MODE_CFG_T sg_moto_cfg[] = {
 static bool sg_output_inited = false;
 static bool sg_audio_ready = false;
 static MUTEX_HANDLE sg_lcd_mutex = NULL;
+static int16_t sg_moto_logical_offset[2] = {0, 0};
 
 static void __lcd_flush_done_cb(TDL_DISP_FRAME_BUFF_T *frame_buff)
 {
@@ -386,35 +387,117 @@ static uint32_t __moto_angle_to_duty(int16_t angle_deg)
                       ((a * (int32_t)(OUT_MOTO_PWM_DUTY_MAX - OUT_MOTO_PWM_DUTY_MIN)) / 180));
 }
 
+static bool __moto_mode_has_ch0(uint8_t mode)
+{
+    return (mode == OUTPUT_MODE_1 || mode == OUTPUT_MODE_3);
+}
+
+static bool __moto_mode_has_ch1(uint8_t mode)
+{
+    return (mode == OUTPUT_MODE_2 || mode == OUTPUT_MODE_3);
+}
+
 static void __moto_start_mask(uint8_t mode)
 {
-    if (mode == OUTPUT_MODE_1 || mode == OUTPUT_MODE_3) {
+    if (__moto_mode_has_ch0(mode)) {
         (void)tkl_pwm_start(TUYA_PWM_NUM_2);
     }
-    if (mode == OUTPUT_MODE_2 || mode == OUTPUT_MODE_3) {
+    if (__moto_mode_has_ch1(mode)) {
         (void)tkl_pwm_start(TUYA_PWM_NUM_3);
     }
 }
 
 static void __moto_stop_mask(uint8_t mode)
 {
-    if (mode == OUTPUT_MODE_1 || mode == OUTPUT_MODE_3) {
+    if (__moto_mode_has_ch0(mode)) {
         (void)tkl_pwm_stop(TUYA_PWM_NUM_2);
     }
-    if (mode == OUTPUT_MODE_2 || mode == OUTPUT_MODE_3) {
+    if (__moto_mode_has_ch1(mode)) {
         (void)tkl_pwm_stop(TUYA_PWM_NUM_3);
     }
 }
 
-static void __moto_set_angle_mask(uint8_t mode, int16_t angle_deg)
+static void __moto_set_angle_mask(uint8_t mode, int16_t logical_offset_deg)
 {
-    uint32_t duty = __moto_angle_to_duty(angle_deg);
-    if (mode == OUTPUT_MODE_1 || mode == OUTPUT_MODE_3) {
-        (void)tkl_pwm_duty_set(TUYA_PWM_NUM_2, duty);
+    int16_t target_deg = 0;
+
+    if (__moto_mode_has_ch0(mode)) {
+        if (moto_bringup_resolve_target_angle(0, logical_offset_deg, &target_deg) == OPRT_OK) {
+            (void)tkl_pwm_duty_set(TUYA_PWM_NUM_2, __moto_angle_to_duty(target_deg));
+            sg_moto_logical_offset[0] = logical_offset_deg;
+        }
     }
-    if (mode == OUTPUT_MODE_2 || mode == OUTPUT_MODE_3) {
-        (void)tkl_pwm_duty_set(TUYA_PWM_NUM_3, duty);
+    if (__moto_mode_has_ch1(mode)) {
+        if (moto_bringup_resolve_target_angle(1, logical_offset_deg, &target_deg) == OPRT_OK) {
+            (void)tkl_pwm_duty_set(TUYA_PWM_NUM_3, __moto_angle_to_duty(target_deg));
+            sg_moto_logical_offset[1] = logical_offset_deg;
+        }
     }
+}
+
+static OPERATE_RET __moto_move_mask(uint8_t mode, int16_t target_offset_deg, uint32_t speed_dps)
+{
+    int16_t start_ch0 = sg_moto_logical_offset[0];
+    int16_t start_ch1 = sg_moto_logical_offset[1];
+    int32_t delta_ch0 = 0;
+    int32_t delta_ch1 = 0;
+    int32_t abs_delta_ch0 = 0;
+    int32_t abs_delta_ch1 = 0;
+    int32_t max_delta = 0;
+    uint32_t duration_ms = 0;
+    uint32_t steps = 0;
+
+    if (speed_dps == 0U) {
+        return OPRT_INVALID_PARM;
+    }
+
+    if (__moto_mode_has_ch0(mode)) {
+        delta_ch0 = (int32_t)target_offset_deg - (int32_t)start_ch0;
+        abs_delta_ch0 = (delta_ch0 >= 0) ? delta_ch0 : -delta_ch0;
+        if (abs_delta_ch0 > max_delta) {
+            max_delta = abs_delta_ch0;
+        }
+    }
+    if (__moto_mode_has_ch1(mode)) {
+        delta_ch1 = (int32_t)target_offset_deg - (int32_t)start_ch1;
+        abs_delta_ch1 = (delta_ch1 >= 0) ? delta_ch1 : -delta_ch1;
+        if (abs_delta_ch1 > max_delta) {
+            max_delta = abs_delta_ch1;
+        }
+    }
+
+    if (max_delta <= 0) {
+        __moto_set_angle_mask(mode, target_offset_deg);
+        return OPRT_OK;
+    }
+
+    duration_ms = ((uint32_t)max_delta * 1000U) / speed_dps;
+    if (duration_ms < OUT_MOTO_STEP_PERIOD_MS) {
+        duration_ms = OUT_MOTO_STEP_PERIOD_MS;
+    }
+
+    steps = duration_ms / OUT_MOTO_STEP_PERIOD_MS;
+    if (steps == 0U) {
+        steps = 1U;
+    }
+
+    for (uint32_t i = 1; i <= steps; i++) {
+        if (__moto_mode_has_ch0(mode)) {
+            int16_t cur_ch0 = (int16_t)(start_ch0 +
+                (int32_t)((float)delta_ch0 * ((float)i / (float)steps) +
+                          ((delta_ch0 >= 0) ? 0.5f : -0.5f)));
+            __moto_set_angle_mask(OUTPUT_MODE_1, cur_ch0);
+        }
+        if (__moto_mode_has_ch1(mode)) {
+            int16_t cur_ch1 = (int16_t)(start_ch1 +
+                (int32_t)((float)delta_ch1 * ((float)i / (float)steps) +
+                          ((delta_ch1 >= 0) ? 0.5f : -0.5f)));
+            __moto_set_angle_mask(OUTPUT_MODE_2, cur_ch1);
+        }
+        tal_system_sleep(OUT_MOTO_STEP_PERIOD_MS);
+    }
+
+    return OPRT_OK;
 }
 
 OPERATE_RET output_hal_init(void)
@@ -431,6 +514,8 @@ OPERATE_RET output_hal_init(void)
     }
 
     (void)moto_bringup_init();
+    sg_moto_logical_offset[0] = 0;
+    sg_moto_logical_offset[1] = 0;
     sg_output_inited = true;
     return OPRT_OK;
 }
@@ -518,9 +603,8 @@ OPERATE_RET output_hal_set_moto_mode(OUTPUT_MODE_E mode)
 {
     const OUT_MOTO_MODE_CFG_T *cfg = NULL;
     uint64_t start_ms = 0;
-    uint32_t step_ms = 100;
-    int16_t angle_pos = OUT_MOTO_CENTER_DEG;
-    int16_t angle_neg = OUT_MOTO_CENTER_DEG;
+    int16_t angle_pos = 0;
+    int16_t angle_neg = 0;
 
     if (mode < OUTPUT_MODE_1 || mode > OUTPUT_MODE_3) {
         return OPRT_INVALID_PARM;
@@ -531,33 +615,25 @@ OPERATE_RET output_hal_set_moto_mode(OUTPUT_MODE_E mode)
     if (cfg->angle_deg > 90U || cfg->speed_dps == 0U) {
         return OPRT_INVALID_PARM;
     }
-    angle_pos = (int16_t)(OUT_MOTO_CENTER_DEG + (int16_t)cfg->angle_deg);
-    angle_neg = (int16_t)(OUT_MOTO_CENTER_DEG - (int16_t)cfg->angle_deg);
-    step_ms = (uint32_t)((cfg->angle_deg * 1000U) / cfg->speed_dps);
-    if (step_ms < 20U) {
-        step_ms = 20U;
-    }
+    angle_pos = (int16_t)cfg->angle_deg;
+    angle_neg = (int16_t)(-(int16_t)cfg->angle_deg);
 
     __moto_start_mask((uint8_t)mode);
 
     if (!cfg->loop) {
-        __moto_set_angle_mask((uint8_t)mode, angle_pos);
-        tal_system_sleep(step_ms);
-        __moto_set_angle_mask((uint8_t)mode, angle_neg);
-        tal_system_sleep(step_ms);
+        (void)__moto_move_mask((uint8_t)mode, angle_pos, cfg->speed_dps);
+        (void)__moto_move_mask((uint8_t)mode, angle_neg, cfg->speed_dps);
     } else {
         start_ms = tal_system_get_millisecond();
         while ((tal_system_get_millisecond() - start_ms) < cfg->run_time_ms) {
-            __moto_set_angle_mask((uint8_t)mode, angle_pos);
-            tal_system_sleep(step_ms);
-            __moto_set_angle_mask((uint8_t)mode, angle_neg);
-            tal_system_sleep(step_ms);
+            (void)__moto_move_mask((uint8_t)mode, angle_pos, cfg->speed_dps);
+            (void)__moto_move_mask((uint8_t)mode, angle_neg, cfg->speed_dps);
         }
     }
 
-    if (cfg->hold_torque) {
-        __moto_set_angle_mask((uint8_t)mode, OUT_MOTO_CENTER_DEG);
-    } else {
+    (void)__moto_move_mask((uint8_t)mode, 0, cfg->speed_dps);
+
+    if (!cfg->hold_torque) {
         __moto_stop_mask((uint8_t)mode);
     }
     return OPRT_OK;
