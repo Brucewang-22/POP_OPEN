@@ -88,6 +88,7 @@ def download_platform(platform):
     platform_root = os.path.join(platforms_root, platform)
     platform_info = get_platform_info(platform)
     repo = platform_info.get("repo", "")
+    branch = platform_info.get("branch", "main")
     commit = platform_info.get("commit", "")
 
     if os.path.exists(platform_root):

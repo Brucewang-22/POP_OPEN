@@ -26,11 +26,8 @@
 #include "tdd_disp_gc9d01.h"
 #endif
 
-#if defined(DISPLAY_NAME_2)
-#define BOARD_DISPLAY_NAME_2 DISPLAY_NAME_2
-#else
-#define BOARD_DISPLAY_NAME_2 "display2"
-#endif
+#define BOARD_DISPLAY_NAME_0 "display0"
+#define BOARD_DISPLAY_NAME_1 "display1"
 
 /***********************************************************
 ************************macro define************************
@@ -294,7 +291,7 @@ static OPERATE_RET __board_register_display(void)
     tdd_disp_spi_st7735s_set_init_seq(cST7735S_XLT_INIT_SEQ);
     TUYA_CALL_ERR_RETURN(tdd_disp_spi_st7735s_register(DISPLAY_NAME, &display_cfg));
 #elif defined(LIBTECH_POP_T5AI_EX_MODULE_GC9D01) && (LIBTECH_POP_T5AI_EX_MODULE_GC9D01 == 1)
-    TUYA_CALL_ERR_RETURN(tdd_disp_spi_gc9d01_register(DISPLAY_NAME, &display_cfg));
+    TUYA_CALL_ERR_RETURN(tdd_disp_spi_gc9d01_register((char *)BOARD_DISPLAY_NAME_0, &display_cfg));
 #endif
 #endif
 #endif
@@ -302,11 +299,11 @@ static OPERATE_RET __board_register_display(void)
 #if defined(LIBTECH_POP_T5AI_EX_MODULE_GC9D01) && (LIBTECH_POP_T5AI_EX_MODULE_GC9D01 == 1)
 #if defined(LIBTECH_POP_T5AI_LCD1_ENABLE) && (LIBTECH_POP_T5AI_LCD1_ENABLE == 1)
     DISP_SPI_DEVICE_CFG_T display2_cfg;
-    const char *disp2_name = BOARD_DISPLAY_NAME_2;
+    const char *disp2_name = BOARD_DISPLAY_NAME_1;
 
     /* If LCD0 is disabled, map LCD1 as primary display name to keep UI path available. */
 #if !defined(LIBTECH_POP_T5AI_LCD0_ENABLE) || (LIBTECH_POP_T5AI_LCD0_ENABLE != 1)
-    disp2_name = DISPLAY_NAME;
+    disp2_name = BOARD_DISPLAY_NAME_0;
 #endif
 
     memset(&display2_cfg, 0, sizeof(DISP_SPI_DEVICE_CFG_T));
@@ -344,6 +341,17 @@ static OPERATE_RET __board_register_display(void)
  *
  * @return Returns OPERATE_RET_OK on success, or an appropriate error code on failure.
  */
+TUYA_GPIO_LEVEL_E board_lcd_backlight_active_level_get(uint8_t instance)
+{
+#if defined(LIBTECH_POP_T5AI_EX_MODULE_GC9D01) && (LIBTECH_POP_T5AI_EX_MODULE_GC9D01 == 1)
+    if (instance == 1U) {
+        return BOARD_LCD2_BL_ACTIVE_LV;
+    }
+#endif
+
+    return BOARD_LCD_BL_ACTIVE_LV;
+}
+
 OPERATE_RET board_register_hardware(void)
 {
     OPERATE_RET rt = OPRT_OK;
